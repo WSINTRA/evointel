@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wunicorm v2 — Design Overview</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --surface:#ffffff;
+    --ink:#1c1917; --ink-soft:#44403c; --muted:#78716c;
+    --line:#e7e5e4; --line-strong:#d6d3d1;
+    --user:#b45309; --user-soft:#fef3e2; --user-line:#f6d4a0;
+    --intel:#4338ca; --intel-soft:#ecebfb; --intel-line:#c7c4f0;
+    --store:#0f766e; --store-soft:#e6f4f2; --store-line:#a7dcd6;
+    --ok:#15803d;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --maxw:1000px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink-soft);
+    font-family:var(--font); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  a{color:inherit;}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px;}
+  .mono{font-family:var(--mono);}
+
+  /* top bar */
+  .topbar{position:sticky; top:0; z-index:50; background:rgba(246,245,242,.82);
+    backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid var(--line);}
+  .tb-inner{padding-top:10px; padding-bottom:0;}
+  .tb-row1{display:flex; align-items:baseline; justify-content:space-between; gap:12px;}
+  .brand{font-weight:700; color:var(--ink); font-size:15px; letter-spacing:.2px;}
+  .brand .v{color:var(--intel); font-family:var(--mono); font-size:12px; margin-left:6px;
+    background:var(--intel-soft); border:1px solid var(--intel-line); border-radius:6px; padding:1px 7px;}
+  .tb-tag{color:var(--muted); font-size:12px; font-family:var(--mono);}
+  .tb-nav{display:flex; gap:6px; overflow-x:auto; padding:8px 0 10px; scrollbar-width:thin;}
+  .tb-nav::-webkit-scrollbar{height:6px;}
+  .tb-nav::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:6px;}
+  .tb-nav a{flex:0 0 auto; text-decoration:none; font-size:12px; color:var(--muted);
+    border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:4px 11px;
+    white-space:nowrap; transition:.15s;}
+  .tb-nav a:hover{color:var(--ink); border-color:var(--line-strong);}
+  .tb-nav a b{color:var(--ink); font-weight:600; margin-right:4px;}
+
+  /* hero */
+  .hero{padding:64px 0 40px;}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--intel); margin:0 0 14px;}
+  h1{font-size:52px; line-height:1.02; letter-spacing:-1.5px; color:var(--ink); margin:0 0 22px; font-weight:800;}
+  .lede{font-size:24px; line-height:1.35; color:var(--ink); font-weight:500; max-width:46ch; margin:0 0 26px; letter-spacing:-.3px;}
+  .lede .em{color:var(--intel);}
+  .move{border-left:3px solid var(--line-strong); padding:4px 0 4px 18px; margin:0 0 26px; max-width:62ch;}
+  .move p{margin:0 0 8px;}
+  .move p:last-child{margin-bottom:0;}
+  .move b{color:var(--ink);}
+  .legend{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 8px;}
+  .lg{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted);
+    background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:5px 12px;}
+  .dot{width:11px; height:11px; border-radius:3px; display:inline-block;}
+  .dot.u{background:var(--user);} .dot.i{background:var(--intel);} .dot.s{background:var(--store);}
+  .meta{color:var(--muted); font-size:13px; font-family:var(--mono); margin-top:22px;}
+
+  /* sections */
+  section.sec{padding:40px 0; border-top:1px solid var(--line); scroll-margin-top:84px;}
+  .kicker{font-family:var(--mono); font-size:12px; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--muted); margin:0 0 6px; display:flex; align-items:center; gap:10px;}
+  .kicker .n{color:var(--intel); font-weight:700;}
+  h2{font-size:29px; letter-spacing:-.6px; color:var(--ink); margin:0 0 14px; font-weight:750;}
+  h3{font-size:17px; color:var(--ink); margin:26px 0 10px; font-weight:700; letter-spacing:-.2px;}
+  p{margin:0 0 14px; max-width:70ch;}
+  .lead{font-size:18px; color:var(--ink-soft); max-width:64ch;}
+  strong{color:var(--ink); font-weight:650;}
+  .muted{color:var(--muted);}
+  ul.clean{margin:0 0 16px; padding-left:0; list-style:none;}
+  ul.clean li{position:relative; padding-left:22px; margin-bottom:9px; max-width:68ch;}
+  ul.clean li::before{content:""; position:absolute; left:2px; top:9px; width:7px; height:7px;
+    border-radius:2px; background:var(--intel);}
+  ul.clean li.b::before{background:var(--user);}
+  code{font-family:var(--mono); font-size:.86em; background:var(--ink); color:#fff;
+    border-radius:5px; padding:1px 6px; word-break:break-word;}
+  code.c-u{background:var(--user-soft); color:#92400e;}
+  code.c-i{background:var(--intel-soft); color:#3730a3;}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px;}
+  .grid{display:grid; gap:14px;}
+  .g2{grid-template-columns:1fr 1fr;}
+  .g3{grid-template-columns:repeat(3,1fr);}
+  .g4{grid-template-columns:repeat(4,1fr);}
+
+  .pill{display:inline-block; font-family:var(--mono); font-size:12px; border-radius:999px;
+    padding:3px 10px; border:1px solid var(--line-strong); color:var(--ink-soft); background:var(--surface);}
+  .pill.u{color:#92400e; background:var(--user-soft); border-color:var(--user-line);}
+  .pill.i{color:#3730a3; background:var(--intel-soft); border-color:var(--intel-line);}
+  .pill.s{color:#115e59; background:var(--store-soft); border-color:var(--store-line);}
+
+  /* keep-cards */
+  .keep{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .keep .k{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--intel);
+    border-radius:10px; padding:14px 16px;}
+  .keep .k h4{margin:0 0 5px; font-size:14.5px; color:var(--ink); font-weight:700;}
+  .keep .k p{margin:0; font-size:13.5px; color:var(--muted); max-width:none;}
+
+  /* shape flow */
+  .flow{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:6px 0 4px;}
+  .fnode{background:var(--surface); border:1px solid var(--line-strong); border-radius:12px;
+    padding:14px 16px; min-width:150px; flex:1;}
+  .fnode .ft{font-size:14px; font-weight:700; color:var(--ink); margin-bottom:3px;}
+  .fnode .fd{font-size:12.5px; color:var(--muted);}
+  .farrow{align-self:center; padding:0 12px; color:var(--muted); font-family:var(--mono); font-size:13px; white-space:nowrap;}
+  .flow-sub{margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--surface); border:1px dashed var(--line-strong); border-radius:12px; padding:12px 16px;}
+  .flow-sub .ft{font-size:13px; font-weight:700; color:var(--ink);}
+  .flow-sub .fd{font-size:12.5px; color:var(--muted);}
+
+  /* notes app wireframe */
+  .window{background:var(--surface); border:1px solid var(--line-strong); border-radius:14px; overflow:hidden;
+    box-shadow:0 1px 2px rgba(0,0,0,.03), 0 12px 30px -18px rgba(28,25,23,.25);}
+  .winbar{display:flex; align-items:center; gap:7px; padding:11px 14px; border-bottom:1px solid var(--line); background:#fbfaf8;}
+  .winbar i{width:11px; height:11px; border-radius:50%; display:block;}
+  .winbar i:nth-child(1){background:#f87171;} .winbar i:nth-child(2){background:#fbbf24;} .winbar i:nth-child(3){background:#34d399;}
+  .winbar .wt{margin-left:8px; font-size:12.5px; color:var(--muted); font-family:var(--mono);}
+  .winbody{display:grid; grid-template-columns:230px 1fr; min-height:300px;}
+  .side{border-right:1px solid var(--line); padding:14px 12px; background:#fcfbf9;}
+  .side .mo{font-size:11px; font-family:var(--mono); letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin:0 0 8px; padding-left:4px;}
+  .note-row{padding:8px 10px; border-radius:9px; margin-bottom:3px; cursor:default;}
+  .note-row .nt{font-size:13px; color:var(--ink); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .note-row .ns{font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .note-row.sel{background:var(--user-soft); box-shadow:inset 0 0 0 1px var(--user-line);}
+  .note-row.wun .ns::before{content:"◆ "; color:var(--intel);}
+  .pane{padding:22px 26px;}
+  .pane .pt{font-size:19px; color:var(--ink); font-weight:700; margin-bottom:4px;}
+  .pane .pm{font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;}
+  .pane .pl{height:9px; border-radius:5px; background:var(--line); margin-bottom:9px;}
+  .pane .pl.w1{width:92%;} .pane .pl.w2{width:78%;} .pane .pl.w3{width:85%;} .pane .pl.w4{width:40%;}
+  .pane ul.chk{list-style:none; padding:0; margin:14px 0;}
+  .pane ul.chk li{font-size:13.5px; color:var(--ink-soft); padding-left:24px; position:relative; margin-bottom:7px;}
+  .pane ul.chk li::before{content:""; position:absolute; left:0; top:1px; width:14px; height:14px; border-radius:4px; border:1.5px solid var(--line-strong);}
+  .pane ul.chk li.d::before{background:var(--user); border-color:var(--user); content:"✓"; color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; line-height:14px;}
+  .cta{margin-top:16px; display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600;
+    color:#3730a3; background:var(--intel-soft); border:1px solid var(--intel-line); border-radius:9px; padding:9px 13px;}
+  .cta .sp{font-size:11px; font-family:var(--mono); font-weight:500; color:var(--intel); opacity:.8;}
+
+  /* security */
+  .sec-steps{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .step{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px 18px;}
+  .step .sn{font-family:var(--mono); font-size:12px; color:var(--store); font-weight:700;}
+  .step h4{margin:6px 0 6px; font-size:15px; color:var(--ink);}
+  .step p{margin:0; font-size:13.5px; color:var(--muted); max-width:none;}
+  .callout{background:var(--intel-soft); border:1px solid var(--intel-line); border-radius:12px; padding:14px 18px; margin:16px 0 0; font-size:14px; color:#312e81;}
+  .callout b{color:#1e1b4b;}
+  .callout.warn{background:var(--user-soft); border-color:var(--user-line); color:#7c2d12;}
+  .callout.warn b{color:#7c2d12;}
+
+  /* architecture diagram */
+  .arch{display:grid; grid-template-columns:1fr 236px; gap:20px; align-items:start;}
+  .spine{display:flex; flex-direction:column;}
+  .layer{background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--intel);
+    border-radius:11px; padding:12px 16px;}
+  .layer.u{border-left-color:var(--user);} .layer.s{border-left-color:var(--store);} .layer.x{border-left-color:var(--muted); border-style:solid;}
+  .layer .ln{font-family:var(--mono); font-size:12.5px; letter-spacing:.4px; text-transform:uppercase; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px;}
+  .layer .lj{font-size:13px; color:var(--muted); margin-top:3px; max-width:none;}
+  .aarrow{align-self:center; display:flex; flex-direction:column; align-items:center; color:var(--muted); font-size:11.5px; font-family:var(--mono); padding:5px 0;}
+  .aarrow::before{content:""; width:2px; height:13px; background:var(--line-strong); margin-bottom:3px;}
+  .aarrow .tri{font-size:10px; line-height:1; margin-top:-2px;}
+  .side{position:sticky; top:96px;}
+  .side .side-lbl{font-family:var(--mono); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin:0 0 10px;}
+  .side .layer{margin-bottom:10px;}
+  .side .layer .lj{font-size:12px;}
+
+  /* graph */
+  .graphwrap{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; overflow-x:auto;}
+  svg.graph{width:100%; height:auto; min-width:640px; display:block;}
+  .gn{font-family:var(--font); font-size:14px; font-weight:650; fill:var(--ink);}
+  .gs{font-family:var(--font); font-size:10px; fill:var(--muted);}
+  .gs2{font-family:var(--mono); font-size:11.5px; fill:#92400e;}
+  .elabel{font-family:var(--mono); font-size:10.5px; fill:var(--ink-soft); paint-order:stroke; stroke:var(--surface); stroke-width:4px; stroke-linejoin:round;}
+  .axis{font-family:var(--mono); font-size:11px; fill:var(--muted); letter-spacing:.5px;}
+  .glegend{display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; margin-top:14px; padding:0 4px;}
+  .gl{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--ink-soft);}
+  .gl .sw{width:34px; height:0; border-top-width:2.5px; border-top-style:solid; flex:0 0 auto;}
+  .gl .sw.solid{border-top-color:var(--intel);}
+  .gl .sw.thick{border-top-color:var(--store); border-top-width:3.5px;}
+  .gl .sw.thin{border-top-color:#a8a29e; border-top-width:1.5px;}
+  .gl .sw.dash{border-top-color:var(--user); border-top-style:dashed;}
+  .gl b{color:var(--ink); font-weight:650;}
+
+  /* two note spaces */
+  .spaces{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .space{border-radius:14px; padding:18px; border:1px solid;}
+  .space.you{background:var(--user-soft); border-color:var(--user-line);}
+  .space.wun{background:var(--intel-soft); border-color:var(--intel-line);}
+  .space .sh{display:flex; align-items:center; gap:9px; font-weight:700; color:var(--ink); font-size:15px; margin-bottom:4px;}
+  .space .sh .dot{}
+  .space .sr{font-size:12.5px; color:var(--muted); margin-bottom:12px;}
+  .space .ex{background:rgba(255,255,255,.7); border:1px solid rgba(0,0,0,.05); border-radius:9px; padding:9px 12px; font-size:13px; color:var(--ink-soft); margin-bottom:8px;}
+  .space .ex .t{font-size:11px; font-family:var(--mono); color:var(--muted); display:block; margin-bottom:2px;}
+  .sharedbar{margin-top:14px; background:var(--ink); color:#fafaf9; border-radius:12px; padding:13px 18px; font-size:13.5px; text-align:center;}
+  .sharedbar b{color:#fff;}
+
+  /* stepper */
+  .steps{display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; counter-reset:s;}
+  .stp{flex:1 1 150px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px; position:relative;}
+  .stp .no{position:absolute; top:-10px; left:12px; font-family:var(--mono); font-size:11px; font-weight:700; color:#fff; background:var(--intel); border-radius:999px; padding:2px 8px;}
+  .stp.you .no{background:var(--user);}
+  .stp .st{font-size:13.5px; font-weight:650; color:var(--ink); margin-top:6px; margin-bottom:3px;}
+  .stp .sd{font-size:12.5px; color:var(--muted);}
+  .stp-arrow{align-self:center; color:var(--line-strong); font-size:18px; padding:0 2px;}
+
+  /* pipeline */
+  .pipe{display:flex; align-items:stretch; flex-wrap:wrap; gap:0; margin:6px 0 18px;}
+  .pnode{background:var(--surface); border:1px solid var(--line-strong); border-radius:12px; padding:13px 15px; flex:1; min-width:140px;}
+  .pnode .pt{font-size:13.5px; font-weight:700; color:var(--ink); margin-bottom:3px;}
+  .pnode .pd{font-size:12px; color:var(--muted);}
+  .pnode .tag{font-family:var(--mono); font-size:10.5px; color:var(--store);}
+  .cads{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;}
+  .cad{border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--surface);}
+  .cad .ct{font-size:14px; font-weight:700; color:var(--ink);}
+  .cad .cd{font-size:12.5px; color:var(--muted);}
+  .cad .badge{font-family:var(--mono); font-size:10.5px; border-radius:999px; padding:2px 9px;}
+  .cad.day .badge{background:var(--intel-soft); color:#3730a3;}
+  .cad.night .badge{background:var(--store-soft); color:#115e59;}
+  .cad .to{margin-top:10px; font-size:12px; color:var(--muted); border-top:1px dashed var(--line); padding-top:9px;}
+  .cad .to b{color:var(--ink);}
+
+  /* tables */
+  .tbl{width:100%; border-collapse:collapse; font-size:14px; margin:6px 0;}
+  .tbl th{ text-align:left; font-size:11.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted);
+    font-family:var(--mono); font-weight:600; padding:8px 12px; border-bottom:1.5px solid var(--line-strong); background:var(--surface);}
+  .tbl td{padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+  .tbl tr:last-child td{border-bottom:none;}
+  .tbl td .rel{font-family:var(--mono); font-size:12px;}
+  .tbl td b{color:var(--ink);}
+  .tblwrap{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface);}
+  .tblwrap .tbl{margin:0;}
+
+  /* foundation columns */
+  .fcols{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .fcol{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:15px 16px;}
+  .fcol h4{margin:0 0 10px; font-size:13px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.5px; color:var(--ink);}
+  .fcol.reuse h4{color:var(--ok);} .fcol.refac h4{color:var(--intel);} .fcol.new h4{color:var(--user);}
+  .fcol ul{list-style:none; padding:0; margin:0;}
+  .fcol li{font-size:13px; color:var(--ink-soft); padding-left:16px; position:relative; margin-bottom:7px;}
+  .fcol li::before{content:""; position:absolute; left:0; top:8px; width:6px; height:6px; border-radius:2px; background:var(--line-strong);}
+  .fcol.reuse li::before{background:var(--ok);} .fcol.new li::before{background:var(--user);} .fcol.refac li::before{background:var(--intel);}
+
+  /* open threads */
+  .threads{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .thr{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
+  .thr .tt{font-size:14px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:9px; margin-bottom:5px;}
+  .thr .tt .st{font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--user); background:var(--user-soft); border:1px solid var(--user-line); border-radius:999px; padding:1px 8px;}
+  .thr p{margin:0; font-size:13px; color:var(--muted); max-width:none;}
+
+  .close{background:var(--ink); color:#e7e5e4; border-radius:16px; padding:26px 28px; margin-top:8px;}
+  .close .cl{font-size:19px; color:#fff; font-weight:700; letter-spacing:-.3px; margin-bottom:8px; max-width:60ch;}
+  .close p{color:#c9c6c2; font-size:14.5px; max-width:66ch;}
+  .close p:last-child{margin-bottom:0;}
+
+  footer{border-top:1px solid var(--line); margin-top:20px; padding:28px 0 48px; color:var(--muted); font-size:13px; font-family:var(--mono);}
+  footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+
+  @media (max-width:820px){
+    h1{font-size:40px;}
+    .lede{font-size:20px;}
+    .g2,.g3,.g4,.keep,.sec-steps,.spaces,.cads,.threads,.fcols{grid-template-columns:1fr;}
+    .arch{grid-template-columns:1fr;}
+    .side{position:static;}
+    .winbody{grid-template-columns:1fr;}
+    .side{border-right:none; border-bottom:1px solid var(--line); max-height:180px; overflow-y:auto;}
+    .glegend{grid-template-columns:1fr;}
+    .stp-arrow{display:none;}
+  }
+  @media print{
+    .topbar{display:none;}
+    body{background:#fff;}
+    section.sec{break-inside:avoid-page;}
+    .window{box-shadow:none;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap tb-inner">
+    <div class="tb-row1">
+      <span class="brand">Wunicorm <span class="v">v2</span></span>
+      <span class="tb-tag">design overview · draft · oct 2026</span>
+    </div>
+    <nav class="tb-nav">
+      <a href="#cover"><b>01</b>Cover</a>
+      <a href="#north"><b>02</b>North star</a>
+      <a href="#shape"><b>03</b>The shape</a>
+      <a href="#notes"><b>04</b>Notes app</a>
+      <a href="#security"><b>05</b>Security</a>
+      <a href="#arch"><b>06</b>Architecture</a>
+      <a href="#graph"><b>07</b>Knowledge graph</a>
+      <a href="#spaces"><b>08</b>Two note spaces</a>
+      <a href="#loop"><b>09</b>Augmentation</a>
+      <a href="#core"><b>10</b>Durable core</a>
+      <a href="#rhythm"><b>11</b>Rhythm</a>
+      <a href="#foundation"><b>12</b>Foundation</a>
+      <a href="#folds"><b>13</b>What folds</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero" id="cover" style="border-top:none; scroll-margin-top:84px;">
+    <p class="eyebrow">Wunicorm · Version 2 · Design Overview</p>
+    <h1>Wunicorm v2</h1>
+    <p class="lede">A notes and planner that uses <span class="em">evolving intelligence</span> to augment daily life and work.</p>
+    <div class="move">
+      <p><b>v1</b> is a self-running engine that evolves a <b>bot's</b> identity from its own reflections.</p>
+      <p><b>v2</b> points that same engine at <b>you</b>: your notes become the input, the model being built is a model of your life, and the output is <b>augmentation</b> — not a chat, not a self-portrait.</p>
+      <p>The engine stays. The <b>subject</b> of the engine changes.</p>
+    </div>
+    <div class="legend">
+      <span class="lg"><span class="dot u"></span> you &amp; your notes</span>
+      <span class="lg"><span class="dot i"></span> wunicorm's intelligence</span>
+      <span class="lg"><span class="dot s"></span> the data stores</span>
+    </div>
+    <p class="meta">working document · companion: <code class="c-i">plan.md</code> · full session export in this directory</p>
+  </section>
+
+  <section class="sec" id="north">
+    <p class="kicker"><span class="n">02</span> North star</p>
+    <h2>What we keep — the durable core</h2>
+    <p class="lead">v1 earned trust through a set of properties that are about <em>how</em> it runs, not <em>what</em> it talks about. v2 re-homes all of them inside the daemon. None of them are replaced.</p>
+    <div class="keep" style="margin-top:18px;">
+      <div class="k"><h4>The task engine</h4><p>A task is a declared unit of work → an artifact it must produce → a shelf check that proves it actually ran.</p></div>
+      <div class="k"><h4>Two kinds of truth</h4><p>Declaration (what should happen) stays separate from observation (what did).</p></div>
+      <div class="k"><h4>Guards in code, not in a prompt</h4><p>The shelf check, freshness, outbound gate, fault ledger and redaction are enforced by code, never requested of the model.</p></div>
+      <div class="k"><h4>Two channels, deliberately split</h4><p>The reflective letter (about itself) and the mechanical attention card (only when a human is needed).</p></div>
+      <div class="k"><h4>Encrypted at rest</h4><p>Memories, reflections — and now everything — sit under a user-held key.</p></div>
+      <div class="k"><h4>The Jungian framework, as a lens</h4><p>Shadow, tensions, archetypes, the six rules — repurposed to read <em>you</em>, not discarded.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="shape">
+    <p class="kicker"><span class="n">03</span> The shape</p>
+    <h2>A local-first daemon, a web UI, a tray icon</h2>
+    <p class="lead">In the Jellyfin sense: it runs on your Mac, serves a web app on <code>localhost</code>, and is a resident process — not a script that fires and exits. Exposed to your own devices over Tailscale; never to the public internet.</p>
+    <div class="flow" style="margin-top:20px;">
+      <div class="fnode"><div class="ft">Menu-bar icon</div><div class="fd">the daemon's face · status</div></div>
+      <div class="farrow">launch / config →</div>
+      <div class="fnode"><div class="ft">Localhost web app</div><div class="fd">the secure notes app, in your browser</div></div>
+    </div>
+    <div class="flow-sub">
+      <span class="ft">Tailscale</span>
+      <span class="farrow">→</span>
+      <span class="fd">the same local app, reachable from your other devices on a private mesh — access, not a third party processing your data.</span>
+    </div>
+    <ul class="clean" style="margin-top:16px;">
+      <li class="b">The Mac app is a thin shell over the localhost web UI; the note-taking UX is built as a web app for fast iteration.</li>
+      <li class="b">Config lives in the app, not in files you edit by hand.</li>
+      <li class="b">The daemon is the app's heart: it owns the schedule and runs the intelligence in the background.</li>
+    </ul>
+  </section>
+
+  <section class="sec" id="notes">
+    <p class="kicker"><span class="n">04</span> The notes app</p>
+    <h2>As plain as the note apps you already use</h2>
+    <p class="lead">You have it open and you type into it the way you already do. It holds the heterogeneous, real stuff — todos, project notes, house tasks, thinking, poetry. This is the new primary input for the intelligence.</p>
+    <div class="window" style="margin-top:20px;">
+      <div class="winbar"><i></i><i></i><i></i><span class="wt">wunicorm — notes</span></div>
+      <div class="winbody">
+        <div class="side">
+          <p class="mo">This month</p>
+          <div class="note-row sel"><div class="nt">Companies to research</div><div class="ns">5 links · today</div></div>
+          <div class="note-row"><div class="nt">Ramp — call notes</div><div class="ns">yesterday</div></div>
+          <div class="note-row"><div class="nt">NX monorepo refactor</div><div class="ns">2d ago</div></div>
+          <div class="note-row"><div class="nt">Hallway repaint</div><div class="ns">todo · house</div></div>
+          <p class="mo" style="margin-top:14px;">Last month</p>
+          <div class="note-row"><div class="nt">Job search — strategy</div><div class="ns">3w ago</div></div>
+          <div class="note-row wun"><div class="nt">What wunicorm noticed</div><div class="ns">inferred · wk 34</div></div>
+        </div>
+        <div class="pane">
+          <div class="pt">Companies to research</div>
+          <div class="pm">today · 12:04</div>
+          <div class="pl w1"></div>
+          <div class="pl w2"></div>
+          <ul class="chk">
+            <li class="d">Linear — check the platform team</li>
+            <li>Basecamp — senior frontend openings</li>
+            <li>Vonage — remote UK</li>
+            <li>Figma — design systems</li>
+            <li>One more to add</li>
+          </ul>
+          <div class="cta"><span class="sp">wunicorm →</span> Research these 5 companies</div>
+        </div>
+      </div>
+    </div>
+    <h3>Features</h3>
+    <div class="grid g2">
+      <div class="card">
+        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Side panel</h4>
+        <p style="margin:0; font-size:13.5px;">Notes ordered by last-edited, grouped by <strong>Month</strong> — the familiar shape. Sort options later.</p>
+      </div>
+      <div class="card">
+        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Tiptap bodies</h4>
+        <p style="margin:0; font-size:13.5px;">Rich note content: headings, lists, links, images, code — already in the foundation.</p>
+      </div>
+      <div class="card">
+        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Two note spaces</h4>
+        <p style="margin:0; font-size:13.5px;">One store, two sources — <code class="c-u">source: user</code> and <code class="c-i">source: wunicorm</code>. Your notes, and its notes-on-you.</p>
+      </div>
+      <div class="card">
+        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Task CTAs live on notes</h4>
+        <p style="margin:0; font-size:13.5px;">When wunicorm proposes a task derived from a note, a button appears on that note. You decide.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="security">
+    <p class="kicker"><span class="n">05</span> Security &amp; privacy</p>
+    <h2>First-class — the key lives with you</h2>
+    <p class="lead">The password is not a login the server checks. It is a <strong>key-derivation input</strong>: it unlocks a key that is derived in your browser, and the server never sees it. This inverts v1, where the decryption password was a server secret in <code>.env</code>.</p>
+    <div class="sec-steps" style="margin-top:20px;">
+      <div class="step"><span class="sn">01 · first run</span><h4>Set a password</h4><p>You choose a master password. The app derives a <strong>recovery seed phrase</strong> you store somewhere safe — a wallet, a password manager, paper.</p></div>
+      <div class="step"><span class="sn">02 · later runs</span><h4>Password unlocks</h4><p>The password re-derives the key on-device and decrypts existing content. Forget it, and the seed re-derives the key.</p></div>
+      <div class="step"><span class="sn">03 · at rest</span><h4>Everything encrypted</h4><p>Notes, memories, reflections and the graph all sit under the same key — <code class="c-s">AES-GCM</code> — as ciphertext. No server master key.</p></div>
+      <div class="step"><span class="sn">04 · at the model</span><h4>Redaction first</h4><p>Whatever is handed to an LLM is scrubbed before it leaves the machine — and you can see exactly what was hidden.</p></div>
+    </div>
+    <div class="callout"><b>Client-side, zero-knowledge.</b> The key is derived on your device (password → KDF → key). Note content is fetched, decrypted and rendered <b>in the browser</b> — the shell is server-rendered, the content is not. "Wrong password" is detected client-side, not by a server 401.</div>
+    <div class="callout warn"><b>The price, stated plainly.</b> Key management is yours, exactly like a crypto wallet. That is the cost of "privacy is first class" — so the key UX has to be right: the seed shown once, no silent re-derivation, a way to rotate.</div>
+  </section>
+
+  <section class="sec" id="arch">
+    <p class="kicker"><span class="n">06</span> Architecture</p>
+    <h2>The system and its parts</h2>
+    <p class="lead">Your notes flow down a spine: stored, watched, structured into a graph, read for insight, and returned as augmentation. Three cross-cutting layers — scheduling, config, security — span the whole thing.</p>
+    <div class="arch" style="margin-top:20px;">
+      <div class="spine">
+        <div class="layer u"><div class="ln">Notes App</div><div class="lj">Mac tray → localhost web · Tiptap · month-grouped · CTAs</div></div>
+        <div class="aarrow">writes<span class="tri">▼</span></div>
+        <div class="layer s"><div class="ln">Notes DB</div><div class="lj">your notes + wunicorm's notes-on-you · encrypted at rest</div></div>
+        <div class="aarrow">watches continuously + full runs on schedule<span class="tri">▼</span></div>
+        <div class="layer"><div class="ln">Sorter</div><div class="lj">one job: pull new / changed content, queue it for processing</div></div>
+        <div class="aarrow">hands off<span class="tri">▼</span></div>
+        <div class="layer"><div class="ln">Processing</div><div class="lj">an LLM judges &amp; structures content into nodes + the 4 pillar-edges, in semantic space-time</div></div>
+        <div class="aarrow">stores<span class="tri">▼</span></div>
+        <div class="layer s"><div class="ln">Graph DB</div><div class="lj">the Intelligence DB — the memory. semantic space-time, 4 relationship pillars</div></div>
+        <div class="aarrow">read + analyze<span class="tri">▼</span></div>
+        <div class="layer"><div class="ln">Insight services</div><div class="lj">the daily sermon · reflections · task proposals · the passes</div></div>
+        <div class="aarrow">via the channels you chose<span class="tri">▼</span></div>
+        <div class="layer u"><div class="ln">Outputs</div><div class="lj">email · notification · in-app helpdesk · note CTA · attention card · visual</div></div>
+      </div>
+      <div class="side">
+        <p class="side-lbl">cross-cutting</p>
+        <div class="layer x"><div class="ln">Scheduler</div><div class="lj">drives the sorter cadence, the full runs, and the insight services — working-day vs. overnight</div></div>
+        <div class="layer x"><div class="ln">Config</div><div class="lj">in the app: AI backend (any OpenAPI) · cadence · output channels · visual toggle</div></div>
+        <div class="layer x"><div class="ln">Security</div><div class="lj">password + seed · client-side zero-knowledge · redaction before any LLM call</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="graph">
+    <p class="kicker"><span class="n">07</span> The knowledge graph</p>
+    <h2>Semantic space-time, held by four pillars</h2>
+    <p class="lead">The graph is not a keyword index. Each concept sits at a point in a combined space — <strong>what it means</strong> (semantic proximity) and <strong>when</strong> (time). Edges are typed by four pillars. Because time is a dimension of position, a thought can be seen <em>drifting</em> across its neighborhood — which is how it infers habits and thinking.</p>
+    <div class="graphwrap" style="margin-top:20px;">
+      <svg class="graph" viewBox="0 0 720 400" role="img" aria-label="A small knowledge graph with five concepts and one property, connected by four types of relationship.">
+        <defs>
+          <marker id="mcausal" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#4338ca"></path>
+          </marker>
+        </defs>
+
+        <line x1="24" y1="40" x2="24" y2="382" stroke="#eceae8" stroke-width="1"></line>
+        <text transform="rotate(-90 14 211)" x="14" y="211" class="axis" text-anchor="middle">meaning</text>
+        <line x1="40" y1="382" x2="672" y2="382" stroke="#d6d3d1" stroke-width="1.5"></line>
+        <path d="M672,378 l9,4 l-9,4 z" fill="#d6d3d1"></path>
+        <text x="628" y="374" class="axis">time →</text>
+
+        <line x1="190" y1="188" x2="282" y2="102" stroke="#4338ca" stroke-width="2" marker-end="url(#mcausal)"></line>
+        <text x="214" y="132" class="elabel" text-anchor="middle">leads to</text>
+
+        <line x1="435" y1="100" x2="528" y2="186" stroke="#0f766e" stroke-width="3.5"></line>
+        <text x="484" y="132" class="elabel" text-anchor="middle">contains</text>
+
+        <line x1="115" y1="224" x2="163" y2="298" stroke="#a8a29e" stroke-width="1.5"></line>
+        <text x="118" y="262" class="elabel" text-anchor="middle">near</text>
+
+        <line x1="240" y1="327" x2="468" y2="327" stroke="#a8a29e" stroke-width="1.5"></line>
+        <text x="354" y="318" class="elabel" text-anchor="middle">near</text>
+
+        <line x1="605" y1="168" x2="610" y2="96" stroke="#b45309" stroke-width="2" stroke-dasharray="5 4"></line>
+        <text x="642" y="134" class="elabel">property</text>
+
+        <g>
+          <rect x="545" y="60" width="130" height="34" rx="8" fill="#fef3e2" stroke="#f6d4a0" stroke-width="1.2"></rect>
+          <text x="610" y="81" text-anchor="middle" class="gs2">salary · £90k</text>
+        </g>
+
+        <g>
+          <rect x="40" y="170" width="150" height="54" rx="12" fill="#fff" stroke="#d6d3d1" stroke-width="1.5"></rect>
+          <circle cx="58" cy="188" r="4" fill="#b45309"></circle>
+          <text x="120" y="194" text-anchor="middle" class="gn">Job search</text>
+          <text x="120" y="211" text-anchor="middle" class="gs">noted wk 34</text>
+        </g>
+        <g>
+          <rect x="285" y="70" width="150" height="54" rx="12" fill="#fff" stroke="#d6d3d1" stroke-width="1.5"></rect>
+          <circle cx="303" cy="88" r="4" fill="#b45309"></circle>
+          <text x="360" y="94" text-anchor="middle" class="gn">Senior React roles</text>
+          <text x="360" y="111" text-anchor="middle" class="gs">recurring</text>
+        </g>
+        <g>
+          <rect x="530" y="170" width="150" height="54" rx="12" fill="#fff" stroke="#d6d3d1" stroke-width="1.5"></rect>
+          <circle cx="548" cy="188" r="4" fill="#b45309"></circle>
+          <text x="605" y="194" text-anchor="middle" class="gn">Ramp (role)</text>
+          <text x="605" y="211" text-anchor="middle" class="gs">wk 34</text>
+        </g>
+        <g>
+          <rect x="90" y="300" width="150" height="54" rx="12" fill="#fff" stroke="#d6d3d1" stroke-width="1.5"></rect>
+          <circle cx="108" cy="318" r="4" fill="#b45309"></circle>
+          <text x="165" y="324" text-anchor="middle" class="gn">Remote work</text>
+          <text x="165" y="341" text-anchor="middle" class="gs">steady</text>
+        </g>
+        <g>
+          <rect x="470" y="300" width="150" height="54" rx="12" fill="#fff" stroke="#d6d3d1" stroke-width="1.5"></rect>
+          <circle cx="488" cy="318" r="4" fill="#4338ca"></circle>
+          <text x="545" y="324" text-anchor="middle" class="gn">Recovery / rest</text>
+          <text x="545" y="341" text-anchor="middle" class="gs">inferred · wk 33</text>
+        </g>
+      </svg>
+    </div>
+    <div class="glegend">
+      <div class="gl"><span class="sw solid"></span><span><b>Leads to</b> — causal</span></div>
+      <div class="gl"><span class="sw thick"></span><span><b>Contains</b> — hierarchical</span></div>
+      <div class="gl"><span class="sw thin"></span><span><b>Near / similar</b> — proximity</span></div>
+      <div class="gl"><span class="sw dash"></span><span><b>Expresses property</b> — attributive</span></div>
+      <div class="gl"><span class="dot u" style="width:9px;height:9px;border-radius:50%;"></span><span>origin: in your notes</span></div>
+      <div class="gl"><span class="dot i" style="width:9px;height:9px;border-radius:50%;"></span><span>origin: inferred by wunicorm</span></div>
+    </div>
+    <div class="tblwrap" style="margin-top:16px;">
+      <table class="tbl">
+        <thead><tr><th>Pillar</th><th>Relationship</th><th>Reads as</th></tr></thead>
+        <tbody>
+          <tr><td><b>Near / similar to</b></td><td class="rel">proximity</td><td>these two concepts sit close in meaning</td></tr>
+          <tr><td><b>Leads to</b></td><td class="rel">causal</td><td>one tends to produce or motivate the other</td></tr>
+          <tr><td><b>Contains</b></td><td class="rel">hierarchical</td><td>a category holding more specific things</td></tr>
+          <tr><td><b>Expresses property</b></td><td class="rel">attributive</td><td>a concept carrying a value (salary, status, date)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top:12px; font-size:13px;">The processing layer (an LLM) is what reads the notes and makes these judgments — deciding the nodes, the pillar-edges, and where each sits in semantic space-time. Deeper concepts on the space-time model to follow; this is the v1 representation.</p>
+  </section>
+
+  <section class="sec" id="spaces">
+    <p class="kicker"><span class="n">08</span> The two note spaces</p>
+    <h2>Your notes, and its notes on you</h2>
+    <p class="lead">There are two note spaces in one store. You write the first; the intelligence writes the second. Both are encrypted under the same key, and the model of you is <strong>inspectable</strong> — you can read what it has learned.</p>
+    <div class="spaces" style="margin-top:20px;">
+      <div class="space you">
+        <div class="sh"><span class="dot u"></span> Your notes</div>
+        <div class="sr">the input · the living stream you type</div>
+        <div class="ex"><span class="t">companies to research</span>Linear, Basecamp, Vonage, Figma…</div>
+        <div class="ex"><span class="t">hallway repaint</span>todo — pick a colour, book the weekend</div>
+      </div>
+      <div class="space wun">
+        <div class="sh"><span class="dot i"></span> Wunicorm's notes-on-you</div>
+        <div class="sr">the model · inferred, evolving, inspectable</div>
+        <div class="ex"><span class="t">inferred · wk 34</span>Your job search is shifting from anxious to strategic.</div>
+        <div class="ex"><span class="t">habit</span>You plan house tasks on Sunday evenings.</div>
+      </div>
+    </div>
+    <div class="sharedbar">one store · one key · both encrypted · <b>the model is yours to read and correct</b></div>
+  </section>
+
+  <section class="sec" id="loop">
+    <p class="kicker"><span class="n">09</span> The augmentation loop</p>
+    <h2>Proactive, not a chat window</h2>
+    <p class="lead">Wunicorm does not wait to be asked. It runs its passes and reaches out — a daily <strong>sermon</strong> on your notes (v1's Persona, aimed at you, sprinkled with the Jungian lens), a notification, or a suggestion. The clearest expression of "evolving intelligence augmenting daily work": it reads a note and offers to do the next thing.</p>
+    <div class="steps" style="margin-top:26px;">
+      <div class="stp you"><span class="no">1</span><div class="st">You write a note</div><div class="sd">five companies, links to their sites</div></div>
+      <div class="stp-arrow">→</div>
+      <div class="stp"><span class="no">2</span><div class="st">Sorter detects</div><div class="sd">the change is queued</div></div>
+      <div class="stp-arrow">→</div>
+      <div class="stp"><span class="no">3</span><div class="st">Graph structures it</div><div class="sd">concepts + the four pillars</div></div>
+      <div class="stp-arrow">→</div>
+      <div class="stp"><span class="no">4</span><div class="st">Insight pass</div><div class="sd">reads it overnight</div></div>
+      <div class="stp-arrow">→</div>
+      <div class="stp"><span class="no">5</span><div class="st">Morning</div><div class="sd">"want me to research these 5?"</div></div>
+      <div class="stp-arrow">→</div>
+      <div class="stp you"><span class="no">6</span><div class="st">The note shows a CTA</div><div class="sd">you tap it — the task runs, the shelf check proves it</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:20px;">
+      <div class="card"><h4 style="margin:0 0 6px; font-size:14.5px; color:var(--ink);">The sermon</h4><p style="margin:0; font-size:13.5px;">A daily address on your own notes — reflective, pointed, sometimes affirming, sometimes a light scolding. The letter channel, about itself.</p></div>
+      <div class="card"><h4 style="margin:0 0 6px; font-size:14.5px; color:var(--ink);">The attention card</h4><p style="margin:0; font-size:13.5px;">Mechanical, sent only when something needs a human — open faults, blocked sends, failed tasks. No model writes it.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="core">
+    <p class="kicker"><span class="n">10</span> The durable core, re-homed</p>
+    <h2>Safe because its acting is fenced</h2>
+    <p class="lead">v2 is agentic — it proposes and runs tasks, sends, generates. The trust does not come from it being unable to act; it comes from its acting being <strong>fenced by code</strong>. The v1 guard library moves inside the daemon and keeps its job unchanged.</p>
+    <div class="tblwrap" style="margin-top:18px;">
+      <table class="tbl">
+        <thead><tr><th>Guard</th><th>What it enforces</th></tr></thead>
+        <tbody>
+          <tr><td><b>Shelf check</b></td><td>a task is a failure unless its artifact exists, is non-empty, was written by this run, and passes its assertions — a green exit code never stands in for a result</td></tr>
+          <tr><td><b>Two kinds of truth</b></td><td>declaration (what should happen) is stored apart from observation (what did)</td></tr>
+          <tr><td><b>Outbound gate</b></td><td>nothing is sent to a recipient not on the allowlist; no body containing a credential; one send per (task, date)</td></tr>
+          <tr><td><b>Fault ledger</b></td><td>a known fault is closed by a fix, not by prose, and a fault is not re-described past its budget</td></tr>
+          <tr><td><b>Redaction</b></td><td>credential and personal values never reach the log or the model</td></tr>
+          <tr><td><b>Two channels</b></td><td>the letter and the attention card are different channels — the failure of 2026 was one channel carrying the other's news</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="rhythm">
+    <p class="kicker"><span class="n">11</span> The pipeline's rhythm</p>
+    <h2>Detect is cheap. Process is not.</h2>
+    <p class="lead">A continuous sorter watching every keystroke is cheap; running the LLM on every keystroke is not. So the two are split: the <strong>sorter detects and queues</strong> continuously, and the <strong>scheduler</strong> triggers <strong>processing</strong> at intervals. That single split makes "always watching" and "an overnight full run" one coherent flow.</p>
+    <div class="pipe" style="margin-top:20px;">
+      <div class="pnode"><span class="tag">continuous</span><div class="pt">Watch</div><div class="pd">the sorter notices a note changed</div></div>
+      <div class="farrow">→</div>
+      <div class="pnode"><div class="pt">Queue</div><div class="pd">the change is held, cheaply, until a run</div></div>
+      <div class="farrow">→</div>
+      <div class="pnode"><span class="tag">scheduled</span><div class="pt">Process</div><div class="pd">the LLM structures it into the graph</div></div>
+    </div>
+    <div class="cads">
+      <div class="cad day"><span class="badge">working-day</span><div class="ct" style="margin-top:8px;">Light · frequent</div><div class="cd">A quick pass over recent notes. Not the full treatment — just enough to keep the model current through the day.</div><div class="to">writes → <b>the same Graph DB</b></div></div>
+      <div class="cad night"><span class="badge">overnight dreamer</span><div class="ct" style="margin-top:8px;">Thorough · nightly</div><div class="cd">The deep pass: full reflection, memories, the Jungian lens, and the material for the morning's sermon.</div><div class="to">writes → <b>the same Graph DB</b></div></div>
+    </div>
+    <div class="callout"><b>The graph is derived, so it is rebuildable.</b> It is computed from the notes, not the source of truth. If it ever goes wrong, a full re-run regenerates it — the v1 "no stale artifact" principle, re-homed in the memory layer.</div>
+  </section>
+
+  <section class="sec" id="foundation">
+    <p class="kicker"><span class="n">12</span> Foundation &amp; stack</p>
+    <h2>Fork the blog app; build the new on top</h2>
+    <p class="lead">The notes app grows out of <code class="c-i">tees_valley_digital</code> — a small, clean full-stack app. Notes and blog posts are close enough cousins that the shell, auth, editor and data pattern carry over. This section stays overview-level on tech, as the doc intends.</p>
+    <div class="grid g4" style="margin:16px 0 20px;">
+      <span class="pill">Bun</span><span class="pill">TanStack Start</span><span class="pill">Mantine</span><span class="pill">Tiptap</span>
+      <span class="pill">Drizzle ORM</span><span class="pill">Zod</span><span class="pill s">SQLite / Postgres — open</span><span class="pill i">LangGraph or similar</span>
+    </div>
+    <div class="fcols">
+      <div class="fcol reuse"><h4>Reuse</h4><ul>
+        <li>App shell + Mantine theme</li>
+        <li>Tiptap rich-text editor</li>
+        <li>List / detail views</li>
+        <li>Ports &amp; adapters + DI data layer</li>
+        <li>Single-user auth as the unlock gate</li>
+        <li>Ops: Docker, CI, error/security plumbing</li>
+      </ul></div>
+      <div class="fcol refac"><h4>Refactor / strip</h4><ul>
+        <li>Remove the public SSR surface + SEO + slug</li>
+        <li>Remove the publish workflow</li>
+        <li>Invert auth to private-by-default</li>
+        <li>Add the notes / todos / planner domain</li>
+        <li>SSR the shell, render content client-side</li>
+      </ul></div>
+      <div class="fcol new"><h4>Net-new</h4><ul>
+        <li>Client-side zero-knowledge encryption</li>
+        <li>Password + recovery seed flow</li>
+        <li>The daemon API (bearer token + sync)</li>
+        <li>The sorter / processing / graph layer</li>
+        <li>The insight &amp; sermon services</li>
+      </ul></div>
+    </div>
+    <p class="muted" style="margin-top:14px; font-size:13px;">Open at build time: the database (SQLite for single-file local-first, or Postgres to keep the fork as-is) and the specific graph store.</p>
+  </section>
+
+  <section class="sec" id="folds">
+    <p class="kicker"><span class="n">13</span> What still folds</p>
+    <h2>Open threads for the detail pass</h2>
+    <p class="lead">This is a rough plan on purpose. These are the places where the architecture is still soft, and where the detail work happens.</p>
+    <div class="threads" style="margin-top:20px;">
+      <div class="thr"><div class="tt">Daemon key access <span class="st">security</span></div><p>How a background daemon decrypts zero-knowledge notes when the app is closed — a secure OS slot (Keychain / Secure Enclave) while the Mac is unlocked, or a defined "unlocked-for-the-daemon" window.</p></div>
+      <div class="thr"><div class="tt">Database choice <span class="st">stack</span></div><p>SQLite for truly single-file local-first, or Postgres to keep the fork. Drizzle covers both; it's a portability call.</p></div>
+      <div class="thr"><div class="tt">The space-time model <span class="st">graph</span></div><p>The deeper concepts behind semantic space-time — how position, embedding and time combine, and how drift is measured. Concepts to come.</p></div>
+      <div class="thr"><div class="tt">"Overnight" = machine-on <span class="st">honest limit</span></div><p>On a local daemon the thorough pass runs when the Mac is awake or idle. An accepted consequence of local-first + Mac-first; stated, not hidden.</p></div>
+      <div class="thr"><div class="tt">The daemon API surface <span class="st">contract</span></div><p>Bearer-token auth + sync endpoints: read notes, write notes, read notes-on-you, tag a CTA, propose / trigger tasks.</p></div>
+      <div class="thr"><div class="tt">How far a task may reach <span class="st">trust</span></div><p>Read-only research vs. something with side effects (a deploy). Confirmation per-task or per-capability, and how the user sets that boundary.</p></div>
+    </div>
+    <div class="close">
+      <div class="cl">A notes and planner that uses evolving intelligence to augment daily life and work.</div>
+      <p>A new project from the ground up — but standing on the parts of v1 that earned their place: the task engine, the guards, the two channels, the encrypted memory. The input becomes your notes; the subject of the engine becomes you.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>wunicorm v2 · design overview · draft · oct 2026</span>
+    <span>companion: plan.md · session export in this directory</span>
+  </div>
+</footer>
+
+</body>
+</html>
