@@ -85,7 +85,12 @@ CREATE NODE TABLE Event(
     context         STRING
 )
 ";
-//Memory - experiences worth keeping!
+//Memory - experiences worth keeping! - significance -- why this matters!..
+//emotions -- the emotional coloring ['excitement', 'vulnerable','determined', 'hope',
+//'practical','anxiety']...
+//reflection -- 'based on the Jungian and wunicorm evolving system of opposites, ie what value do I
+//get from this, what can I intuite from this, where am I thinking this will go, what do my
+//feelings tell me.
 pub const CREATE_NODE_TABLE_MEMORY: &str = r"
 CREATE NODE TABLE Memory(
     id              STRING PRIMARY KEY,
