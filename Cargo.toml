@@ -1,0 +1,29 @@
+[package]
+name = "memory-proto"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "memory_proto"
+path = "src/lib.rs"
+
+[dependencies]
+chrono = { version = "0.4.45", features = ["serde"] }
+lbug = "0.22.1"
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+uuid = { version = "1.29.0", features = ["serde", "v4"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+too_many_lines = "allow"
