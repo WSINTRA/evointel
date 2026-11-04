@@ -7,6 +7,7 @@ fn main() {
     println!("opened memory db at {}", db.db_path.display());
 
     let conn = db.connect().expect("failed to connect");
+    memory_proto::extensions::load_extensions(&conn).expect("failed to load extensions");
     if is_new {
         memory_proto::schema::init(&conn).expect("failed to init schema");
         println!("schema initialized");
