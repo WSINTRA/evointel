@@ -114,7 +114,21 @@ CREATE NODE TABLE Memory(
 )
 ";
 
+// Raw user input -- the ground truth. Everything else is derived from notes.
+pub const CREATE_NODE_TABLE_NOTE: &str = r"
+CREATE NODE TABLE Note(
+    id                STRING PRIMARY KEY,
+    content           STRING,
+    content_embedding FLOAT[518],
+    created_at        TIMESTAMP,
+    updated_at        TIMESTAMP,
+    layer             INT16 DEFAULT 0,
+    context           STRING
+)
+";
+
 pub const ALL_ENTITY_NODE_DDLS: &[&str] = &[
+    CREATE_NODE_TABLE_NOTE,
     CREATE_NODE_TABLE_ENTITY,
     CREATE_NODE_TABLE_TIME,
     CREATE_NODE_TABLE_ABSTRACT_TIME,
