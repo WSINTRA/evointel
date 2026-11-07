@@ -725,3 +725,127 @@ fn link_leads_to_creates_edge() {
     let row = result.next().unwrap();
     assert_eq!(row[0], Value::String("blood sugar drop".to_string()));
 }
+
+// ─── Temporal edge tests ────────────────────────────────────────────
+
+#[test]
+fn link_before_creates_edge() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    // Create a note and a time node
+    let note = Note {
+        id: "note-before".to_string(),
+        content: "alarm went off at 6am".to_string(),
+        content_embedding: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "morning".to_string(),
+    };
+    let time = Time {
+        id: "t-morning".to_string(),
+        granularity: "day".to_string(),
+        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(),
+        ends_at: None,
+        label: "morning".to_string(),
+        label_resolved: "2026-11-03 morning".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    };
+    insert_note(&conn, &note).unwrap();
+    insert_time(&conn, &time).unwrap();
+
+    // Link: note BEFORE time
+    let from = memory_proto::mutations::NodeRef::new("note-before", "Note");
+    let to = memory_proto::mutations::NodeRef::new("t-morning", "Time");
+    let props = memory_proto::edges::Before {
+        id: "edge-before-1".to_string(),
+        gap_duration: "2 hours".to_string(),
+        confidence: 0.95,
+        label: "alarm before morning".to_string(),
+        label_resolved: "alarm→morning".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "test".to_string(),
+    };
+    memory_proto::mutations::link_before(&conn, &from, &to, &props).unwrap();
+
+    let mut result = conn
+        .query("MATCH (a:Note {id: 'note-before'})-[:FROM_Before]->(e:Before {id: 'edge-before-1'})-[:TO_Before]->(b:Time {id: 't-morning'}) RETURN e.gap_duration;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::String("2 hours".to_string()));
+}
+
+#[test]
+fn link_valid_from_to_fact() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    let time = Time {
+        id: "t-valid".to_string(),
+        granularity: "day".to_string(),
+        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(),
+        ends_at: None,
+        label: "nov 3".to_string(),
+        label_resolved: "2026-11-03".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    };
+    let fact = Fact {
+        id: "fact-valid".to_string(),
+        predicate: "is_raining".to_string(),
+        certainty: 0.9,
+        source: "weather_app".to_string(),
+        label: "raining today".to_string(),
+        label_resolved: "rainfall on 2026-11-03".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 2,
+        context: "weather".to_string(),
+    };
+    insert_time(&conn, &time).unwrap();
+    insert_fact(&conn, &fact).unwrap();
+
+    let from = memory_proto::mutations::NodeRef::new("t-valid", "Time");
+    let to = memory_proto::mutations::NodeRef::new("fact-valid", "Fact");
+    let props = memory_proto::edges::ValidFrom {
+        id: "edge-vfrom-1".to_string(),
+        precision: "exact".to_string(),
+        confidence: 1.0,
+        label: "raining from nov 3".to_string(),
+        label_resolved: "rain valid from 2026-11-03".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "weather".to_string(),
+    };
+    memory_proto::mutations::link_valid_from(&conn, &from, &to, &props).unwrap();
+
+    let mut result = conn
+        .query("MATCH (a:Time {id: 't-valid'})-[:FROM_ValidFrom]->(e:ValidFrom {id: 'edge-vfrom-1'})-[:TO_ValidFrom]->(b:Fact {id: 'fact-valid'}) RETURN e.precision;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::String("exact".to_string()));
+}
