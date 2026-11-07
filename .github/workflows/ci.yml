@@ -19,9 +19,13 @@ jobs:
 
       - name: Cache
         uses: Swatinem/rust-cache@v2
+        with:
+          working-directory: memory-proto
 
       - name: Clippy
+        working-directory: memory-proto
         run: cargo clippy -- -D warnings
 
       - name: Test
+        working-directory: memory-proto
         run: cargo test
