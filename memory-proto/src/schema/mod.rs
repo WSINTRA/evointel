@@ -18,8 +18,7 @@ pub fn init(conn: &Connection) -> DbResult<()> {
         .chain(poly_relations::ALL_POLY_RELATIONS.iter())
         .chain(time_tree::ALL_TIME_TREE_DDLS.iter())
     {
-        let mut stmt = conn.prepare(ddl)?;
-        conn.execute(&mut stmt, vec![])?;
+        conn.query(ddl)?;
     }
     Ok(())
 }

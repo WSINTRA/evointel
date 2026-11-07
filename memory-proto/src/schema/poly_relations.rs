@@ -1,66 +1,209 @@
+// Edge-node poly-relations: each edge type has a FROM_* and TO_* rel table.
+// Syntax: multiple FROM ... TO ... pairs separated by commas (no pipes).
+
 // Contains
-pub const CONTAINS: &str = r"
-CREATE REL TABLE FROM_Contains(FROM Memory | Event | Fact | Note | Time TO Contains, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_Contains(FROM Contains TO Memory | Event | Fact | Entity | Time, role STRING DEFAULT 'target');
+pub const CONTAINS: &str = "
+CREATE REL TABLE FROM_Contains(
+    FROM Memory TO Contains,
+    FROM Event TO Contains,
+    FROM Fact TO Contains,
+    FROM Note TO Contains,
+    FROM Time TO Contains,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_Contains(
+    FROM Contains TO Memory,
+    FROM Contains TO Event,
+    FROM Contains TO Fact,
+    FROM Contains TO Entity,
+    FROM Contains TO Time,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // LeadsTo
-pub const LEADS_TO: &str = r"
-CREATE REL TABLE FROM_LeadsTo(FROM Memory | Event | Fact TO LeadsTo, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_LeadsTo(FROM LeadsTo TO Memory | Event | Fact | AbstractTime, role STRING DEFAULT 'target');
+pub const LEADS_TO: &str = "
+CREATE REL TABLE FROM_LeadsTo(
+    FROM Memory TO LeadsTo,
+    FROM Event TO LeadsTo,
+    FROM Fact TO LeadsTo,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_LeadsTo(
+    FROM LeadsTo TO Memory,
+    FROM LeadsTo TO Event,
+    FROM LeadsTo TO Fact,
+    FROM LeadsTo TO AbstractTime,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // Prevents
-pub const PREVENTS: &str = r"
-CREATE REL TABLE FROM_Prevents(FROM Event | Fact TO Prevents, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_Prevents(FROM Prevents TO Event | Fact | Memory, role STRING DEFAULT 'target');
+pub const PREVENTS: &str = "
+CREATE REL TABLE FROM_Prevents(
+    FROM Event TO Prevents,
+    FROM Fact TO Prevents,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_Prevents(
+    FROM Prevents TO Event,
+    FROM Prevents TO Fact,
+    FROM Prevents TO Memory,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // Causes
-pub const CAUSES: &str = r"
-CREATE REL TABLE FROM_Causes(FROM Memory | Event | Fact TO Causes, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_Causes(FROM Causes TO Event | Fact, role STRING DEFAULT 'target');
+pub const CAUSES: &str = "
+CREATE REL TABLE FROM_Causes(
+    FROM Memory TO Causes,
+    FROM Event TO Causes,
+    FROM Fact TO Causes,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_Causes(
+    FROM Causes TO Event,
+    FROM Causes TO Fact,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // BecauseOf
-pub const BECAUSE_OF: &str = r"
-CREATE REL TABLE FROM_BecauseOf(FROM Memory | Event TO BecauseOf, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_BecauseOf(FROM BecauseOf TO Event | Fact, role STRING DEFAULT 'target');
+pub const BECAUSE_OF: &str = "
+CREATE REL TABLE FROM_BecauseOf(
+    FROM Memory TO BecauseOf,
+    FROM Event TO BecauseOf,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_BecauseOf(
+    FROM BecauseOf TO Event,
+    FROM BecauseOf TO Fact,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // Similar
-pub const SIMILAR: &str = r"
-CREATE REL TABLE FROM_Similar(FROM Note | Entity | Fact | Event | Memory TO Similar, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_Similar(FROM Similar TO Note | Entity | Fact | Event | Memory, role STRING DEFAULT 'target');
+pub const SIMILAR: &str = "
+CREATE REL TABLE FROM_Similar(
+    FROM Note TO Similar,
+    FROM Entity TO Similar,
+    FROM Fact TO Similar,
+    FROM Event TO Similar,
+    FROM Memory TO Similar,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_Similar(
+    FROM Similar TO Note,
+    FROM Similar TO Entity,
+    FROM Similar TO Fact,
+    FROM Similar TO Event,
+    FROM Similar TO Memory,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // HasProperty
-pub const HAS_PROPERTY: &str = r"
-CREATE REL TABLE FROM_HasProperty(FROM Note | Entity | Fact | Event | Memory TO HasProperty, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_HasProperty(FROM HasProperty TO Entity, role STRING DEFAULT 'target');
+pub const HAS_PROPERTY: &str = "
+CREATE REL TABLE FROM_HasProperty(
+    FROM Note TO HasProperty,
+    FROM Entity TO HasProperty,
+    FROM Fact TO HasProperty,
+    FROM Event TO HasProperty,
+    FROM Memory TO HasProperty,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_HasProperty(
+    FROM HasProperty TO Entity,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // Before
-pub const BEFORE: &str = r"
-CREATE REL TABLE FROM_Before(FROM Note | Time | Event | AbstractTime TO Before, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_Before(FROM Before TO Time | Event | AbstractTime, role STRING DEFAULT 'target');
+pub const BEFORE: &str = "
+CREATE REL TABLE FROM_Before(
+    FROM Note TO Before,
+    FROM Time TO Before,
+    FROM Event TO Before,
+    FROM AbstractTime TO Before,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_Before(
+    FROM Before TO Time,
+    FROM Before TO Event,
+    FROM Before TO AbstractTime,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // After
-pub const AFTER: &str = r"
-CREATE REL TABLE FROM_After(FROM Note | Time | Event | AbstractTime TO After, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_After(FROM After TO Time | Event | AbstractTime, role STRING DEFAULT 'target');
+pub const AFTER: &str = "
+CREATE REL TABLE FROM_After(
+    FROM Note TO After,
+    FROM Time TO After,
+    FROM Event TO After,
+    FROM AbstractTime TO After,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_After(
+    FROM After TO Time,
+    FROM After TO Event,
+    FROM After TO AbstractTime,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // During
-pub const DURING: &str = r"
-CREATE REL TABLE FROM_During(FROM Note | Time | Event TO During, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_During(FROM During TO Time | Event, role STRING DEFAULT 'target');
+pub const DURING: &str = "
+CREATE REL TABLE FROM_During(
+    FROM Note TO During,
+    FROM Time TO During,
+    FROM Event TO During,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_During(
+    FROM During TO Time,
+    FROM During TO Event,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // ValidFrom
-pub const VALID_FROM: &str = r"
-CREATE REL TABLE FROM_ValidFrom(FROM Time | AbstractTime TO ValidFrom, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_ValidFrom(FROM ValidFrom TO Note | Fact | Event | Memory, role STRING DEFAULT 'target');
+pub const VALID_FROM: &str = "
+CREATE REL TABLE FROM_ValidFrom(
+    FROM Time TO ValidFrom,
+    FROM AbstractTime TO ValidFrom,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_ValidFrom(
+    FROM ValidFrom TO Note,
+    FROM ValidFrom TO Fact,
+    FROM ValidFrom TO Event,
+    FROM ValidFrom TO Memory,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // ValidTo
-pub const VALID_TO: &str = r"
-CREATE REL TABLE FROM_ValidTo(FROM Time | AbstractTime TO ValidTo, role STRING DEFAULT 'source');
-CREATE REL TABLE TO_ValidTo(FROM ValidTo TO Note | Fact | Event | Memory, role STRING DEFAULT 'target');
+pub const VALID_TO: &str = "
+CREATE REL TABLE FROM_ValidTo(
+    FROM Time TO ValidTo,
+    FROM AbstractTime TO ValidTo,
+    role STRING DEFAULT 'source'
+);
+CREATE REL TABLE TO_ValidTo(
+    FROM ValidTo TO Note,
+    FROM ValidTo TO Fact,
+    FROM ValidTo TO Event,
+    FROM ValidTo TO Memory,
+    role STRING DEFAULT 'target'
+);
 ";
+
 // Time Tree
-const TIMETREE: &str = r"
-CREATE REL TABLE TIME_HIERARCHY(FROM Time TO Time, ONE_MANY);";
+const TIMETREE: &str = "
+CREATE REL TABLE TIME_HIERARCHY(FROM Time TO Time, ONE_MANY);
+";
+
 pub const ALL_POLY_RELATIONS: &[&str] = &[
     CONTAINS,
     LEADS_TO,
