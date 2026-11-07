@@ -1,8 +1,10 @@
 mod content;
+mod edge_links;
 mod notes;
 mod time_ops;
 
 pub use content::{insert_entity, insert_event, insert_fact, insert_memory};
+pub use edge_links::{link_contains, link_has_property, link_similar, NodeRef};
 pub use notes::insert_note;
 pub use time_ops::{insert_abstract_time, insert_time, wire_time_hierarchy};
 

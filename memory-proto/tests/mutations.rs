@@ -383,3 +383,204 @@ fn wire_time_hierarchy_creates_rel() {
     let row = result.next().unwrap();
     assert_eq!(row[0], Value::Int64(1));
 }
+
+// ─── Edge link tests ────────────────────────────────────────────────
+
+fn test_contains() -> memory_proto::edges::Contains {
+    memory_proto::edges::Contains {
+        id: "edge-contains-1".to_string(),
+        containment_types: "entity_mention".to_string(),
+        weight: 0.9,
+        label: "note mentions paris".to_string(),
+        label_resolved: "note→entity:Paris".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "extraction".to_string(),
+    }
+}
+
+fn test_similar() -> memory_proto::edges::Similar {
+    memory_proto::edges::Similar {
+        id: "edge-similar-1".to_string(),
+        similarity: 0.85,
+        sim_context: "same city, different context".to_string(),
+        sim_method: "cosine".to_string(),
+        label: "paris ~ berlin".to_string(),
+        label_resolved: "European capitals".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "inference".to_string(),
+    }
+}
+
+#[test]
+fn link_contains_creates_edge_node_and_rels() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    // Create source and target nodes
+    let note = Note {
+        id: "note-src".to_string(),
+        content: "I visited Paris last summer".to_string(),
+        content_embedding: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "travel".to_string(),
+    };
+    let entity = Entity {
+        id: "ent-dest".to_string(),
+        label: "Paris".to_string(),
+        label_resolved: "Paris, France".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "travel".to_string(),
+    };
+    insert_note(&conn, &note).unwrap();
+    insert_entity(&conn, &entity).unwrap();
+
+    // Link them
+    let from = memory_proto::mutations::NodeRef::new("note-src", "Note");
+    let to = memory_proto::mutations::NodeRef::new("ent-dest", "Entity");
+    let props = test_contains();
+    let edge_id = memory_proto::mutations::link_contains(&conn, &from, &to, &props).unwrap();
+    assert_eq!(edge_id, "edge-contains-1");
+
+    // Verify edge node exists with correct props
+    let mut result = conn
+        .query("MATCH (e:Contains {id: 'edge-contains-1'}) RETURN e.containment_types, e.weight;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::String("entity_mention".to_string()));
+    assert_eq!(row[1], Value::Double(0.9));
+
+    // Verify FROM_Contains rel exists
+    let mut result = conn
+        .query("MATCH (a:Note {id: 'note-src'})-[:FROM_Contains]->(e:Contains {id: 'edge-contains-1'}) RETURN count(a);")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Int64(1));
+
+    // Verify TO_Contains rel exists
+    let mut result = conn
+        .query("MATCH (e:Contains {id: 'edge-contains-1'})-[:TO_Contains]->(b:Entity {id: 'ent-dest'}) RETURN count(b);")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Int64(1));
+}
+
+#[test]
+fn link_similar_roundtrip() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    // Create two entities
+    let e1 = Entity {
+        id: "ent-a".to_string(),
+        label: "Paris".to_string(),
+        label_resolved: "Paris, France".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "geo".to_string(),
+    };
+    let e2 = Entity {
+        id: "ent-b".to_string(),
+        label: "Berlin".to_string(),
+        label_resolved: "Berlin, Germany".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "geo".to_string(),
+    };
+    insert_entity(&conn, &e1).unwrap();
+    insert_entity(&conn, &e2).unwrap();
+
+    // Link with Similar
+    let from = memory_proto::mutations::NodeRef::new("ent-a", "Entity");
+    let to = memory_proto::mutations::NodeRef::new("ent-b", "Entity");
+    let props = test_similar();
+    memory_proto::mutations::link_similar(&conn, &from, &to, &props).unwrap();
+
+    // Verify edge node
+    let mut result = conn
+        .query("MATCH (e:Similar {id: 'edge-similar-1'}) RETURN e.similarity, e.sim_method;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Double(0.85));
+    assert_eq!(row[1], Value::String("cosine".to_string()));
+
+    // Verify both rels
+    let mut result = conn
+        .query("MATCH (a:Entity {id: 'ent-a'})-[:FROM_Similar]->(e:Similar {id: 'edge-similar-1'})-[:TO_Similar]->(b:Entity {id: 'ent-b'}) RETURN count(e);")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Int64(1));
+}
+
+#[test]
+fn link_contains_idempotent() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    let note = Note {
+        id: "note-idem".to_string(),
+        content: "test".to_string(),
+        content_embedding: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "test".to_string(),
+    };
+    let entity = Entity {
+        id: "ent-idem".to_string(),
+        label: "Test".to_string(),
+        label_resolved: "Test".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    };
+    insert_note(&conn, &note).unwrap();
+    insert_entity(&conn, &entity).unwrap();
+
+    let from = memory_proto::mutations::NodeRef::new("note-idem", "Note");
+    let to = memory_proto::mutations::NodeRef::new("ent-idem", "Entity");
+    let props = test_contains();
+
+    // Link twice with same id
+    memory_proto::mutations::link_contains(&conn, &from, &to, &props).unwrap();
+    memory_proto::mutations::link_contains(&conn, &from, &to, &props).unwrap();
+
+    // Verify only one edge node
+    let mut result = conn
+        .query("MATCH (e:Contains {id: 'edge-contains-1'}) RETURN count(e);")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Int64(1));
+}
