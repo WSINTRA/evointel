@@ -2,7 +2,7 @@ use lbug::Connection;
 
 use crate::db::DbResult;
 
-const EXTENSIONS: &[&str] = &["algo", "vector", "fts"];
+const EXTENSIONS: &[&str] = &["vector", "fts"];
 
 pub fn load_extensions(conn: &Connection) -> DbResult<()> {
     for ext in EXTENSIONS {
