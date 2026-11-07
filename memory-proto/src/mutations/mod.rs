@@ -1,17 +1,20 @@
 mod content;
 mod notes;
+mod time_ops;
 
 pub use content::{insert_entity, insert_event, insert_fact, insert_memory};
 pub use notes::insert_note;
+pub use time_ops::{insert_abstract_time, insert_time, wire_time_hierarchy};
 
 use chrono::{DateTime, Utc};
 use lbug::{LogicalType, Value};
+use time::OffsetDateTime;
 
 use crate::schema::EMBEDDING_DIM;
 
 /// Converts a chrono `DateTime<Utc>` to `time::OffsetDateTime` (what lbug expects).
-pub(crate) fn chrono_to_time(dt: &DateTime<Utc>) -> time::OffsetDateTime {
-    time::OffsetDateTime::from_unix_timestamp(dt.timestamp()).expect("valid unix timestamp")
+pub(crate) fn chrono_to_time(dt: &DateTime<Utc>) -> OffsetDateTime {
+    OffsetDateTime::from_unix_timestamp(dt.timestamp()).expect("valid unix timestamp")
 }
 
 /// Converts an optional `DateTime<Utc>` to a lbug Value (Timestamp or Null).

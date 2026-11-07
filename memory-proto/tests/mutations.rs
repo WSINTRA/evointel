@@ -1,9 +1,10 @@
 use chrono::DateTime;
 use lbug::Value;
 use memory_proto::mutations::{
-    insert_entity, insert_event, insert_fact, insert_memory, insert_note,
+    insert_abstract_time, insert_entity, insert_event, insert_fact, insert_memory, insert_note,
+    insert_time, wire_time_hierarchy,
 };
-use memory_proto::nodes::{Entity, Event, Fact, Memory, Note};
+use memory_proto::nodes::{AbstractTime, Entity, Event, Fact, Memory, Note, Time};
 use memory_proto::schema::EMBEDDING_DIM;
 use memory_proto::MemoryDb;
 
@@ -258,4 +259,127 @@ fn insert_memory_with_emotions() {
             ]
         )
     );
+}
+
+// ─── Time tests ─────────────────────────────────────────────────────
+
+fn test_time() -> Time {
+    Time {
+        id: "t-2026-11-03".to_string(),
+        granularity: "day".to_string(),
+        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(), // 2026-11-03
+        ends_at: Some(DateTime::from_timestamp(1762214400, 0).unwrap()),
+        label: "November 3, 2026".to_string(),
+        label_resolved: "2026-11-03".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    }
+}
+
+#[test]
+fn insert_time_roundtrip() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    let time = test_time();
+    insert_time(&conn, &time).unwrap();
+
+    let mut result = conn
+        .query(
+            "MATCH (n:Time {id: 't-2026-11-03'}) RETURN n.granularity, n.label, n.label_resolved;",
+        )
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::String("day".to_string()));
+    assert_eq!(row[1], Value::String("November 3, 2026".to_string()));
+    assert_eq!(row[2], Value::String("2026-11-03".to_string()));
+}
+
+fn test_abstract_time() -> AbstractTime {
+    AbstractTime {
+        id: "at-future".to_string(),
+        semantics: "unbounded forward".to_string(),
+        label: "future".to_string(),
+        label_resolved: "future (unbounded)".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    }
+}
+
+#[test]
+fn insert_abstract_time_roundtrip() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    let at = test_abstract_time();
+    insert_abstract_time(&conn, &at).unwrap();
+
+    let mut result = conn
+        .query("MATCH (n:AbstractTime {id: 'at-future'}) RETURN n.semantics, n.label;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::String("unbounded forward".to_string()));
+    assert_eq!(row[1], Value::String("future".to_string()));
+}
+
+#[test]
+fn wire_time_hierarchy_creates_rel() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    // Use unique IDs that don't conflict with the time_tree seed data
+    let parent = Time {
+        id: "t-test-year".to_string(),
+        granularity: "year".to_string(),
+        starts_at: DateTime::from_timestamp(1767225600, 0).unwrap(),
+        ends_at: Some(DateTime::from_timestamp(1798761599, 0).unwrap()),
+        label: "2026".to_string(),
+        label_resolved: "2026".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    };
+    let child = Time {
+        id: "t-test-day".to_string(),
+        granularity: "day".to_string(),
+        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(),
+        ends_at: Some(DateTime::from_timestamp(1762214400, 0).unwrap()),
+        label: "Nov 3".to_string(),
+        label_resolved: "2026-11-03".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 1,
+        context: "test".to_string(),
+    };
+    insert_time(&conn, &parent).unwrap();
+    insert_time(&conn, &child).unwrap();
+
+    // Wire them
+    wire_time_hierarchy(&conn, "t-test-year", "t-test-day").unwrap();
+
+    // Verify the rel exists
+    let mut result = conn
+        .query("MATCH (p:Time {id: 't-test-year'})-[:TIME_HIERARCHY]->(c:Time {id: 't-test-day'}) RETURN count(p);")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Int64(1));
 }
