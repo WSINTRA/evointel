@@ -3,6 +3,7 @@ pub mod edges;
 pub mod extensions;
 pub mod mutations;
 pub mod nodes;
+pub mod queries;
 pub mod query;
 pub mod schema;
 pub mod vector;
