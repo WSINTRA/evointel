@@ -1,7 +1,9 @@
 use lbug::{Connection, Value};
 
 use crate::db::DbResult;
-use crate::edges::{Contains, EdgeType, HasProperty, Similar};
+use crate::edges::{
+    BecauseOf, Causes, Contains, EdgeType, HasProperty, LeadsTo, Prevents, Similar,
+};
 
 use super::{chrono_to_time, chrono_to_time_opt};
 
@@ -234,6 +236,166 @@ pub fn link_has_property(
                 "updated_at",
                 Value::Timestamp(chrono_to_time(&props.updated_at)),
             ),
+            ("layer", Value::Int16(props.layer)),
+            ("context", Value::String(props.context.clone())),
+        ],
+    )
+}
+
+// ─── Causal edges ───────────────────────────────────────────────────
+
+pub fn link_leads_to(
+    conn: &Connection,
+    from: &NodeRef,
+    to: &NodeRef,
+    props: &LeadsTo,
+) -> DbResult<String> {
+    create_edge_link(
+        conn,
+        EdgeType::LeadsTo,
+        from,
+        to,
+        &props.id,
+        "e.probability = $prob, \
+         e.strength = $str, \
+         e.mechanism = $mech, \
+         e.label = $label, \
+         e.label_resolved = $label_resolved, \
+         e.learned_at = $learned_at, \
+         e.expire_at = $expire_at, \
+         e.created_at = $created_at, \
+         e.updated_at = $updated_at, \
+         e.layer = $layer, \
+         e.context = $context",
+        vec![
+            ("prob", Value::Double(props.probability)),
+            ("str", Value::Double(props.strength)),
+            ("mech", Value::String(props.mechanism.clone())),
+            ("label", Value::String(props.label.clone())),
+            ("label_resolved", Value::String(props.label_resolved.clone())),
+            ("learned_at", Value::Timestamp(chrono_to_time(&props.learned_at))),
+            ("expire_at", chrono_to_time_opt(props.expire_at.as_ref())),
+            ("created_at", Value::Timestamp(chrono_to_time(&props.created_at))),
+            ("updated_at", Value::Timestamp(chrono_to_time(&props.updated_at))),
+            ("layer", Value::Int16(props.layer)),
+            ("context", Value::String(props.context.clone())),
+        ],
+    )
+}
+
+pub fn link_causes(
+    conn: &Connection,
+    from: &NodeRef,
+    to: &NodeRef,
+    props: &Causes,
+) -> DbResult<String> {
+    create_edge_link(
+        conn,
+        EdgeType::Causes,
+        from,
+        to,
+        &props.id,
+        "e.probability = $prob, \
+         e.strength = $str, \
+         e.mechanism = $mech, \
+         e.directness = $direct, \
+         e.label = $label, \
+         e.label_resolved = $label_resolved, \
+         e.learned_at = $learned_at, \
+         e.expire_at = $expire_at, \
+         e.created_at = $created_at, \
+         e.updated_at = $updated_at, \
+         e.layer = $layer, \
+         e.context = $context",
+        vec![
+            ("prob", Value::Double(props.probability)),
+            ("str", Value::Double(props.strength)),
+            ("mech", Value::String(props.mechanism.clone())),
+            ("direct", Value::String(props.directness.clone())),
+            ("label", Value::String(props.label.clone())),
+            ("label_resolved", Value::String(props.label_resolved.clone())),
+            ("learned_at", Value::Timestamp(chrono_to_time(&props.learned_at))),
+            ("expire_at", chrono_to_time_opt(props.expire_at.as_ref())),
+            ("created_at", Value::Timestamp(chrono_to_time(&props.created_at))),
+            ("updated_at", Value::Timestamp(chrono_to_time(&props.updated_at))),
+            ("layer", Value::Int16(props.layer)),
+            ("context", Value::String(props.context.clone())),
+        ],
+    )
+}
+
+pub fn link_prevents(
+    conn: &Connection,
+    from: &NodeRef,
+    to: &NodeRef,
+    props: &Prevents,
+) -> DbResult<String> {
+    create_edge_link(
+        conn,
+        EdgeType::Prevents,
+        from,
+        to,
+        &props.id,
+        "e.probability = $prob, \
+         e.strength = $str, \
+         e.mechanism = $mech, \
+         e.label = $label, \
+         e.label_resolved = $label_resolved, \
+         e.learned_at = $learned_at, \
+         e.expire_at = $expire_at, \
+         e.created_at = $created_at, \
+         e.updated_at = $updated_at, \
+         e.layer = $layer, \
+         e.context = $context",
+        vec![
+            ("prob", Value::Double(props.probability)),
+            ("str", Value::Double(props.strength)),
+            ("mech", Value::String(props.mechanism.clone())),
+            ("label", Value::String(props.label.clone())),
+            ("label_resolved", Value::String(props.label_resolved.clone())),
+            ("learned_at", Value::Timestamp(chrono_to_time(&props.learned_at))),
+            ("expire_at", chrono_to_time_opt(props.expire_at.as_ref())),
+            ("created_at", Value::Timestamp(chrono_to_time(&props.created_at))),
+            ("updated_at", Value::Timestamp(chrono_to_time(&props.updated_at))),
+            ("layer", Value::Int16(props.layer)),
+            ("context", Value::String(props.context.clone())),
+        ],
+    )
+}
+
+pub fn link_because_of(
+    conn: &Connection,
+    from: &NodeRef,
+    to: &NodeRef,
+    props: &BecauseOf,
+) -> DbResult<String> {
+    create_edge_link(
+        conn,
+        EdgeType::BecauseOf,
+        from,
+        to,
+        &props.id,
+        "e.probability = $prob, \
+         e.strength = $str, \
+         e.explanation = $expl, \
+         e.label = $label, \
+         e.label_resolved = $label_resolved, \
+         e.learned_at = $learned_at, \
+         e.expire_at = $expire_at, \
+         e.created_at = $created_at, \
+         e.updated_at = $updated_at, \
+         e.layer = $layer, \
+         e.context = $context",
+        vec![
+            ("prob", Value::Double(props.probability)),
+            ("str", Value::Double(props.strength)),
+            ("expl", Value::String(props.explanation.clone())),
+            ("label", Value::String(props.label.clone())),
+            ("label_resolved", Value::String(props.label_resolved.clone())),
+            ("learned_at", Value::Timestamp(chrono_to_time(&props.learned_at))),
+            ("expire_at", chrono_to_time_opt(props.expire_at.as_ref())),
+            ("created_at", Value::Timestamp(chrono_to_time(&props.created_at))),
+            ("updated_at", Value::Timestamp(chrono_to_time(&props.updated_at))),
             ("layer", Value::Int16(props.layer)),
             ("context", Value::String(props.context.clone())),
         ],

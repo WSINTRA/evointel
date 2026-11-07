@@ -584,3 +584,144 @@ fn link_contains_idempotent() {
     let row = result.next().unwrap();
     assert_eq!(row[0], Value::Int64(1));
 }
+
+// ─── Causal edge tests ──────────────────────────────────────────────
+
+#[test]
+fn link_causes_creates_edge() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    // Create two facts
+    let f1 = Fact {
+        id: "fact-cause".to_string(),
+        predicate: "rains".to_string(),
+        certainty: 1.0,
+        source: "obs".to_string(),
+        label: "it rained".to_string(),
+        label_resolved: "rainfall event".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 2,
+        context: "weather".to_string(),
+    };
+    let f2 = Fact {
+        id: "fact-effect".to_string(),
+        predicate: "floods".to_string(),
+        certainty: 0.9,
+        source: "obs".to_string(),
+        label: "street flooded".to_string(),
+        label_resolved: "urban flooding".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 2,
+        context: "weather".to_string(),
+    };
+    insert_fact(&conn, &f1).unwrap();
+    insert_fact(&conn, &f2).unwrap();
+
+    // Link with Causes
+    let from = memory_proto::mutations::NodeRef::new("fact-cause", "Fact");
+    let to = memory_proto::mutations::NodeRef::new("fact-effect", "Fact");
+    let props = memory_proto::edges::Causes {
+        id: "edge-causes-1".to_string(),
+        probability: 0.8,
+        strength: 0.9,
+        mechanism: "surface runoff".to_string(),
+        directness: "direct".to_string(),
+        label: "rain causes flooding".to_string(),
+        label_resolved: "precipitation→flooding".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "weather".to_string(),
+    };
+    memory_proto::mutations::link_causes(&conn, &from, &to, &props).unwrap();
+
+    // Verify full path
+    let mut result = conn
+        .query("MATCH (a:Fact {id: 'fact-cause'})-[:FROM_Causes]->(e:Causes {id: 'edge-causes-1'})-[:TO_Causes]->(b:Fact {id: 'fact-effect'}) RETURN e.probability, e.directness;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::Double(0.8));
+    assert_eq!(row[1], Value::String("direct".to_string()));
+}
+
+#[test]
+fn link_leads_to_creates_edge() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = MemoryDb::open(&dir.path().join("test.db"), EMBEDDING_DIM).unwrap();
+    let conn = db.connect().unwrap();
+    memory_proto::schema::init(&conn).unwrap();
+
+    let evt1 = Event {
+        id: "evt-lead-src".to_string(),
+        predicate: "skipped_meal".to_string(),
+        certainty: 1.0,
+        source: "note".to_string(),
+        status: "occurred".to_string(),
+        is_ongoing: false,
+        label: "skipped lunch".to_string(),
+        label_resolved: "meal skip".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 3,
+        context: "health".to_string(),
+    };
+    let evt2 = Event {
+        id: "evt-lead-dst".to_string(),
+        predicate: "energy_drop".to_string(),
+        certainty: 0.85,
+        source: "inference".to_string(),
+        status: "potential".to_string(),
+        is_ongoing: false,
+        label: "afternoon energy crash".to_string(),
+        label_resolved: "energy decline".to_string(),
+        label_embedding: None,
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 3,
+        context: "health".to_string(),
+    };
+    insert_event(&conn, &evt1).unwrap();
+    insert_event(&conn, &evt2).unwrap();
+
+    let from = memory_proto::mutations::NodeRef::new("evt-lead-src", "Event");
+    let to = memory_proto::mutations::NodeRef::new("evt-lead-dst", "Event");
+    let props = memory_proto::edges::LeadsTo {
+        id: "edge-leads-1".to_string(),
+        probability: 0.7,
+        strength: 0.6,
+        mechanism: "blood sugar drop".to_string(),
+        label: "skipping lunch leads to crash".to_string(),
+        label_resolved: "meal skip→energy drop".to_string(),
+        learned_at: ts(),
+        expire_at: None,
+        created_at: ts(),
+        updated_at: ts(),
+        layer: 0,
+        context: "health".to_string(),
+    };
+    memory_proto::mutations::link_leads_to(&conn, &from, &to, &props).unwrap();
+
+    let mut result = conn
+        .query("MATCH (a:Event {id: 'evt-lead-src'})-[:FROM_LeadsTo]->(e:LeadsTo {id: 'edge-leads-1'})-[:TO_LeadsTo]->(b:Event {id: 'evt-lead-dst'}) RETURN e.mechanism;")
+        .unwrap();
+    let row = result.next().unwrap();
+    assert_eq!(row[0], Value::String("blood sugar drop".to_string()));
+}
