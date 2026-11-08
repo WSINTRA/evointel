@@ -45,9 +45,10 @@
           "predicate": { "type": "string" },
           "significance": { "type": "string" },
           "emotions": { "type": "array", "items": { "type": "string" } },
+          "reflection": { "type": "string" },
           "label": { "type": "string" }
         },
-        "required": ["predicate", "significance", "emotions", "label"],
+        "required": ["predicate", "significance", "emotions", "reflection", "label"],
         "additionalProperties": false
       }
     },

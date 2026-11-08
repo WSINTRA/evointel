@@ -8,13 +8,18 @@
 //!
 //! The [`LlmClient`] trait is the seam: [`UreqClient`] talks to real
 //! servers, [`RecordedClient`] replays canned responses so tests stay
-//! hermetic. Prompts are data, not code: [`load_prompt`] reads
-//! `prompts/<name>` at runtime when present (iterate without
-//! recompiling) and falls back to the copy baked in at build time.
+//! hermetic. On top of it, [`LlmJudge`] implements the dreamer's
+//! `Judge` trait — the live brain. Prompts are data, not code:
+//! [`load_prompt`] reads `prompts/<name>` at runtime when present
+//! (iterate without recompiling) and falls back to the copy baked in
+//! at build time.
+
+mod judge;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::Path;
+use std::rc::Rc;
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
@@ -23,6 +28,8 @@ use thiserror::Error;
 use ureq::Agent;
 
 use crate::schema::EMBEDDING_DIM;
+
+pub use judge::{LlmJudge, Pillar, RawJudgment};
 
 /// Everything the client layer needs to know about the outside world.
 ///
@@ -304,16 +311,32 @@ struct EmbeddingData {
 
 // ─── The hermetic client ────────────────────────────────────────────
 
+#[derive(Debug, Default)]
+struct RecordedState {
+    chat_responses: VecDeque<Result<String, LlmError>>,
+    embed_responses: VecDeque<Result<Vec<Vec<f32>>, LlmError>>,
+    chat_calls: Vec<(Vec<ChatMessage>, Option<serde_json::Value>)>,
+    embed_calls: Vec<Vec<String>>,
+}
+
 /// Canned-response client for tests and demos: chat and embed calls
-/// are recorded (inspectable via `chat_calls` / `embed_calls`) and
-/// answered from queues pushed by the test. An exhausted queue is an
-/// error, never silence.
+/// are recorded (inspectable via `chat_calls()` / `embed_calls()`)
+/// and answered from queues pushed by the test. An exhausted queue is
+/// an error, never silence.
+///
+/// Clones share state — clone one into an [`LlmJudge`] and keep the
+/// original to assert on what the judge sent.
 #[derive(Debug, Default)]
 pub struct RecordedClient {
-    chat_responses: RefCell<VecDeque<Result<String, LlmError>>>,
-    embed_responses: RefCell<VecDeque<Result<Vec<Vec<f32>>, LlmError>>>,
-    pub chat_calls: RefCell<Vec<(Vec<ChatMessage>, Option<serde_json::Value>)>>,
-    pub embed_calls: RefCell<Vec<Vec<String>>>,
+    state: Rc<RefCell<RecordedState>>,
+}
+
+impl Clone for RecordedClient {
+    fn clone(&self) -> Self {
+        Self {
+            state: Rc::clone(&self.state),
+        }
+    }
 }
 
 impl RecordedClient {
@@ -322,19 +345,27 @@ impl RecordedClient {
     }
 
     pub fn push_chat(&self, response: Result<String, LlmError>) {
-        self.chat_responses.borrow_mut().push_back(response);
+        self.state.borrow_mut().chat_responses.push_back(response);
     }
 
     pub fn push_embed(&self, response: Result<Vec<Vec<f32>>, LlmError>) {
-        self.embed_responses.borrow_mut().push_back(response);
+        self.state.borrow_mut().embed_responses.push_back(response);
     }
 
     pub fn chat_call_count(&self) -> usize {
-        self.chat_calls.borrow().len()
+        self.state.borrow().chat_calls.len()
     }
 
     pub fn embed_call_count(&self) -> usize {
-        self.embed_calls.borrow().len()
+        self.state.borrow().embed_calls.len()
+    }
+
+    pub fn chat_calls(&self) -> Vec<(Vec<ChatMessage>, Option<serde_json::Value>)> {
+        self.state.borrow().chat_calls.clone()
+    }
+
+    pub fn embed_calls(&self) -> Vec<Vec<String>> {
+        self.state.borrow().embed_calls.clone()
     }
 }
 
@@ -344,21 +375,25 @@ impl LlmClient for RecordedClient {
         messages: &[ChatMessage],
         schema: Option<&serde_json::Value>,
     ) -> Result<String, LlmError> {
-        self.chat_calls
+        self.state
             .borrow_mut()
+            .chat_calls
             .push((messages.to_vec(), schema.cloned()));
-        self.chat_responses
+        self.state
             .borrow_mut()
+            .chat_responses
             .pop_front()
             .unwrap_or_else(|| Err(LlmError::Malformed("no recorded chat response".to_string())))
     }
 
     fn embed(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, LlmError> {
-        self.embed_calls
+        self.state
             .borrow_mut()
+            .embed_calls
             .push(texts.iter().map(ToString::to_string).collect());
-        self.embed_responses
+        self.state
             .borrow_mut()
+            .embed_responses
             .pop_front()
             .unwrap_or_else(|| {
                 Err(LlmError::Malformed(
@@ -465,8 +500,8 @@ mod tests {
         assert!(c.chat(&[], None).is_err(), "exhausted queue is an error");
 
         assert_eq!(c.chat_call_count(), 3);
-        assert_eq!(c.chat_calls.borrow()[0].0[0].content, "hi");
-        assert!(c.chat_calls.borrow()[0].1.is_none());
+        assert_eq!(c.chat_calls()[0].0[0].content, "hi");
+        assert!(c.chat_calls()[0].1.is_none());
     }
 
     #[test]
@@ -477,11 +512,23 @@ mod tests {
         let out = c.embed(&["a", "b"]).unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].len(), EMBEDDING_DIM);
-        assert_eq!(
-            c.embed_calls.borrow()[0],
-            vec!["a".to_string(), "b".to_string()]
-        );
+        assert_eq!(c.embed_calls()[0], vec!["a".to_string(), "b".to_string()]);
         assert!(c.embed(&["c"]).is_err(), "exhausted queue is an error");
         assert_eq!(c.embed_call_count(), 2);
+    }
+
+    #[test]
+    fn recorded_client_clones_share_state() {
+        let original = RecordedClient::new();
+        original.push_chat(Ok("{}".to_string()));
+        let twin = original.clone();
+
+        // The twin answers; the original sees the call.
+        let out = twin.chat(&[ChatMessage::user("hello")], None).unwrap();
+        assert_eq!(out, "{}");
+        assert_eq!(original.chat_call_count(), 1);
+        assert_eq!(original.chat_calls()[0].0[0].content, "hello");
+        // And the queue the original pushed is consumed once, by the twin.
+        assert!(twin.chat(&[], None).is_err());
     }
 }

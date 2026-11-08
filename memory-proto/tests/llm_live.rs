@@ -40,6 +40,8 @@ fn live_chat_extracts_under_the_full_schema() {
     for key in ["entities", "facts", "events", "memories", "times", "edges"] {
         assert!(parsed[key].is_array(), "missing array {key} in {msg}");
     }
+    // For manual runs (--nocapture): eyeball the judgment.
+    println!("{parsed}");
     assert!(
         !parsed["entities"].as_array().unwrap().is_empty(),
         "the note has entities: {msg}"
