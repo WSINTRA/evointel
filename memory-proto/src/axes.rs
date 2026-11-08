@@ -329,6 +329,31 @@ pub const GATE_OPPOSITE_COSINE_MAX: f32 = 0.75;
 /// this.
 pub const GATE_DISCRIMINABILITY_MIN: f32 = 0.8;
 
+// ─── The self's evolution constants ──────────────────────────────────
+//
+// One documented place. Every value is logged on every dream run, and
+// every one of them is subject to no-revision-without-observation.
+
+/// Core damping (α): how much of Wunicorm's previous core survives each
+/// update. `0.9` is the hysteresis that makes a personality rather than
+/// a mood — the core changes over months, not windows.
+pub const CORE_DAMPING: f32 = 0.9;
+
+/// Compensation base strength (k): the most Wunicorm's fast component
+/// ever leans against a one-sided user position. The dyad, not either
+/// point, is the unit of balance.
+pub const COMPENSATION_BASE: f32 = 0.25;
+
+/// Rigidity threshold (θ): below this straightness there is no
+/// compensation at all. A stance that moves with circumstance is
+/// healthy — medicine scales to stuckness, never to direction.
+pub const RIGIDITY_THRESHOLD: f32 = 0.7;
+
+/// Drop dilution (δ): how much a dropped note dilutes Wunicorm's
+/// confidence. Drops shrink the position toward zero; they never push
+/// it anywhere.
+pub const DROP_DILUTION: f32 = 0.5;
+
 /// The gate's measurements of a corpus: do the poles actually separate
 /// in embedding space? Measured from the same exemplar evidence
 /// [`AxisFrame::from_exemplars`] consumes.
