@@ -8,14 +8,20 @@ voice, full eval) is **complete**. Its record lives in git history. The memory
 layer is proven: LadybugDB, the four pillars, the Jungian function space, the
 two-point model, the dream cycle.
 
-**v1 goal:** a working daemon. The memory layer is the engine; v1 adds the
-ingress (Mac Notes via osascript), the scheduler (when to dream), the tray
-(menu-bar icon), and the output (notifications + Notes writer). No web app.
-Mac Notes is the input surface.
+**The daemon shell is now implemented.** Mac Notes ingress, daily scheduling,
+notifications, Notes output, the tao menu-bar tray, and local app/DMG packaging
+are in place. The tray was visually accepted, the DMG and signature were
+verified, and all 177 tests pass with Clippy clean.
+
+**Current phase: live end-to-end acceptance.** Task 9 remains pending: a full
+scheduled dream against real Mac Notes and the local LLM servers has not yet
+been verified. Tasks 1-8 and 10-13 are complete to the verification limits
+recorded below. Task CTAs, launch at login, continuous ingestion, Developer ID
+signing/notarization, and universal builds are deferred.
 
 ## What this list is: the daemon shell
 
-Three new layers wrap around the proven memory core:
+The daemon shell wraps the proven memory core:
 
 ```
 [ Mac Notes app ]
@@ -36,7 +42,7 @@ Three new layers wrap around the proven memory core:
 [ TRAY ]         -- menu-bar icon on main thread, shows state
 ```
 
-Single process. Main thread = tray (Cocoa event loop). Worker thread = daemon
+Single process. Main thread = tray (tao/Cocoa event loop). Worker thread = daemon
 loop. State shared via `Arc<AtomicU8>`.
 
 ## Design principles
@@ -48,9 +54,9 @@ loop. State shared via `Arc<AtomicU8>`.
   on the main thread, the dream loop on a worker thread.
 - **osascript is the Notes bridge.** Read notes, write notes, send
   notifications — all through `std::process::Command` invoking `osascript`.
-- **Config is a TOML file.** `~/.config/memory-proto/config.toml`. Created
+- **Config is a TOML file.** `~/Library/Application Support/memory-proto/config.toml`. Created
   with defaults on first run. LLM URLs still overridable by env vars.
-- **State is a small JSON file.** `~/.local/share/memory-proto/state.json`
+- **State is a small JSON file.** `~/Library/Application Support/memory-proto/state.json`
   holds `last_seen` (note ID → modification date) and `last_dream_date`.
 - **The tray is the only UI.** Menu-bar icon with three states: idle,
   dreaming, notification. Menu: status, open folder, quit.
@@ -69,7 +75,7 @@ loop. State shared via `Arc<AtomicU8>`.
 | Note identity | Core Data URI (`id of note`) | Stable across renames |
 | Change detection | Modification date comparison | Cheap; no content hashing |
 | Note body | HTML → strip to text | LLM wants text, not markup |
-| DB location | `~/.local/share/memory-proto/memory.db` | XDG standard |
+| DB location | `~/Library/Application Support/memory-proto/memory.db` | macOS platform data directory |
 | Threading | Main = tray; worker = daemon | `tray-icon` needs main thread on macOS |
 | Shutdown | SIGINT/SIGTERM or tray "Quit" → daemon thread exits | Graceful |
 
@@ -97,15 +103,15 @@ becomes an example binary.
 
 ### Task 2: Config layer
 
-**What:** A `Config` struct read from `~/.config/memory-proto/config.toml`.
+**What:** A `Config` struct read from `~/Library/Application Support/memory-proto/config.toml`.
 Creates the file with defaults on first run.
 
 **Details:**
 - `src/config.rs`: `Config` struct + `Config::load() -> Result<Self>`.
 - Fields:
   - `dream_time: String` — default `"22:00"`, parsed to `(u8, u8)` (hour, min)
-  - `db_path: String` — default `~/.local/share/memory-proto/memory.db`
-  - `state_path: String` — default `~/.local/share/memory-proto/state.json`
+  - `db_path: String` — default `~/Library/Application Support/memory-proto/memory.db`
+  - `state_path: String` — default `~/Library/Application Support/memory-proto/state.json`
   - `excluded_folders: Vec<String>` — default `["Wunicorm", "Recently Deleted"]`
   - `[llm]` block: `chat_base_url`, `chat_model`, `embed_base_url`,
     `embed_model` — all optional, env vars override
@@ -327,9 +333,10 @@ tray and daemon, handles shutdown.
 
 ---
 
-### Task 9: End-to-end verify
+### Task 9: End-to-end verify — PENDING
 
-**What:** Run the daemon, confirm the full cycle works.
+**What:** Run the daemon, confirm the full cycle works. Component verification
+and the demo do not complete this task; it requires a real scheduled dream.
 
 **Details:**
 - Build release: `cargo build --release`
@@ -367,12 +374,12 @@ tray and daemon, handles shutdown.
 
 **Files:** `src/tray.rs`, `Cargo.toml`, `Cargo.lock`
 
-**Verification:** build and Clippy clean; the packaged process stays running.
-Visual menu-bar confirmation requires a GUI session.
+**Verification:** build and Clippy clean; the packaged process stays running;
+the menu-bar icon was visually confirmed by the user.
 
 **Commit:** `fix: run tray in a macOS application event loop`
 
-**Depends on:** Task 9
+**Depends on:** Task 8 (developed while Task 9 live acceptance remains pending)
 
 ---
 
@@ -429,8 +436,7 @@ pass.
 - Mount the DMG read-only; verify its executable, Applications symlink, plist,
   and app signature.
 - Launch the packaged app and verify that its process remains running. The
-  terminal lacks accessibility/screen-capture permission, so visual inspection
-  of the menu-bar icon remains a user acceptance check.
+  menu-bar icon was subsequently visually confirmed by the user.
 - README documents daemon/demo commands, packaging, installation, permissions,
   data preservation, and the local-signing limitation.
 
@@ -453,7 +459,7 @@ Task 5 → feat: add output layer (macOS notifications, Notes writer)
 Task 6 → feat: add tray icon with state indicator
 Task 7 → feat: add daemon loop (sleep, check, dream, output)
 Task 8 → feat: wire daemon entry point (config, db, tray, worker)
-Task 9 → chore: verify end-to-end daemon cycle
+Task 9 (pending) → chore: verify end-to-end daemon cycle
 Task 10 → fix: run tray in a macOS application event loop
 Task 11 → feat: add macOS app bundle metadata
 Task 12 → feat: add local macOS DMG packaging script
@@ -485,5 +491,9 @@ green (alias for `test -- --test-threads=1`).
 | DMG architecture | Current Mac only for v1 |
 | DMG signing | Local ad-hoc signature; Developer ID/notarization deferred |
 | Native dependencies | Vendor and re-sign OpenSSL dylibs; rewrite load paths to `@rpath`; include license |
+| Live acceptance | Pending: a complete scheduled dream against real Mac Notes and local LLM servers |
+| Task CTAs / task engine | Deferred |
+| Launch at login | Deferred; no LaunchAgent installed |
+| Distribution | Current architecture and ad-hoc signing only; universal builds and notarization deferred |
 | Shutdown | SIGINT/SIGTERM or tray Quit → graceful join |
 | Error handling | Log to stderr, continue the loop. Never die for one bad night. |

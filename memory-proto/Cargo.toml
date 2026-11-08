@@ -11,19 +11,21 @@ path = "src/lib.rs"
 chrono = { version = "0.4.45", features = ["serde"] }
 ctrlc = "3"
 dirs = "5"
-image = { version = "0.25", default-features = false, features = ["png"] }
 lbug = "0.22.1"
-objc2-core-foundation = "0.3"
 regex = "1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-tao = "0.31"
 thiserror = "2.0.21"
 time = "0.3"
 toml = "0.8"
-tray-icon = "0.19"
 ureq = { version = "3", features = ["json"] }
 uuid = { version = "1.29.0", features = ["serde", "v4"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+objc2-core-foundation = "0.3"
+tao = "0.31"
+tray-icon = "0.19"
 
 [dev-dependencies]
 tempfile = "3.27.0"

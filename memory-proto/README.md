@@ -1,10 +1,10 @@
 # memory-proto
 
-Prototype for Wunicorm v2's memory layer -- a semantic space-time knowledge graph built on [LadybugDB](https://ladybugdb.com/).
+Wunicorm's Rust memory layer and resident macOS daemon: a semantic space-time knowledge graph built on [LadybugDB](https://ladybugdb.com/), fed by Mac Notes and presented through a menu-bar tray.
 
 ## What this is
 
-The memory layer is the most novel part of Wunicorm v2. It models concepts as a multipartite graph where nodes carry both **semantic position** (embedding vectors) and **temporal position** (timestamps), and edges are typed by four pillars:
+The crate contains both the proven memory pipeline and the working daemon shell. The memory layer is the most novel part of Wunicorm v2. It models concepts as a multipartite graph where nodes carry both **semantic position** (embedding vectors) and **temporal position** (timestamps), and edges are typed by four pillars:
 
 | Pillar | Relationship |
 |---|---|
@@ -62,8 +62,10 @@ cargo clippy              # lint (CI: --all-targets -- -D warnings)
 
 The daemon reads `~/Library/Application Support/memory-proto/config.toml` on
 macOS and creates it with a default dream time of `22:00` on first run. The
-demo and the live gate need the local servers (`WUNICORM_EMBED_URL`, chat
-endpoint); everything else is hermetic.
+daemon needs Mac Notes and the local LLM servers for a real dream. The demo
+and live gate also need those servers (`WUNICORM_EMBED_URL` and the chat
+endpoint). The **test suites** are hermetic except for explicitly enabled live
+probes.
 
 ## macOS app and DMG
 
@@ -127,6 +129,20 @@ The prototype build-out (old Tasks 1-19) and the function space (Tasks 20-31, se
 - [x] The sermon speaks from the self (movement language only; numbers stripped at construction)
 - [x] Versioned migrations (idempotent batches, in-place upgrades, transactional-DDL semantics pinned)
 - [x] Full eval: the §8 story on the axes, SelfState rebuildability
-- [x] Resident daemon: Mac Notes ingress, scheduler, notifications, Notes writer
-- [x] Menu-bar tray on a real macOS event loop, with idle/dreaming/notification states
+- [x] Resident daemon components: Mac Notes ingress, scheduler, notifications, Notes writer
+- [x] Menu-bar tray on a real macOS event loop, with idle/dreaming/notification states; appearance visually confirmed
 - [x] Local app bundle and verified DMG packaging (vendored OpenSSL, ad-hoc signature)
+- [x] 177 tests passing and Clippy clean
+
+### Verification boundary
+
+The memory/full-eval suites, daemon components, DMG mount/signature/checksum,
+and tray appearance are verified. **A complete live scheduled dream against
+real Mac Notes and the local LLM servers has not yet been accepted.** That
+check still needs to prove scheduled ingestion, graph writes, notification,
+Notes output, quiet-day behavior, and the once-per-day/next-day guard.
+
+Task CTAs and the general task engine, launch at login, continuous/working-day
+ingestion, Developer ID signing/notarization, and universal Intel/Apple Silicon
+builds are deferred. Real redaction is required before configuring a remote
+LLM; the current target is local model servers.
