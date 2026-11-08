@@ -1,18 +1,18 @@
 use chrono::DateTime;
+use memory_proto::MemoryDb;
 use memory_proto::mutations::{
-    insert_entity, insert_event, insert_note, link_contains, link_similar, NodeRef,
+    NodeRef, insert_entity, insert_event, insert_note, link_contains, link_similar,
 };
 use memory_proto::nodes::{Entity, Event, Note};
 use memory_proto::queries::{connected_notes, events_in_range, get_entity, get_note, neighbors};
 use memory_proto::schema::EMBEDDING_DIM;
-use memory_proto::MemoryDb;
 
 fn ts() -> DateTime<chrono::Utc> {
-    DateTime::from_timestamp(1700000000, 0).unwrap()
+    DateTime::from_timestamp(1_700_000_000, 0).unwrap()
 }
 
 fn ts_offset(secs: i64) -> DateTime<chrono::Utc> {
-    DateTime::from_timestamp(1700000000 + secs, 0).unwrap()
+    DateTime::from_timestamp(1_700_000_000 + secs, 0).unwrap()
 }
 
 #[test]

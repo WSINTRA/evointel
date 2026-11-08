@@ -1,12 +1,12 @@
 use chrono::DateTime;
+use memory_proto::MemoryDb;
 use memory_proto::mutations::insert_entity;
 use memory_proto::nodes::Entity;
 use memory_proto::schema::EMBEDDING_DIM;
 use memory_proto::vector::{init_vector_indexes, semantic_search};
-use memory_proto::MemoryDb;
 
 fn ts() -> DateTime<chrono::Utc> {
-    DateTime::from_timestamp(1700000000, 0).unwrap()
+    DateTime::from_timestamp(1_700_000_000, 0).unwrap()
 }
 
 fn entity_with_embedding(id: &str, embedding: Vec<f32>) -> Entity {

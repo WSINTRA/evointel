@@ -1,15 +1,15 @@
 use chrono::DateTime;
 use lbug::Value;
+use memory_proto::MemoryDb;
 use memory_proto::mutations::{
     insert_abstract_time, insert_entity, insert_event, insert_fact, insert_memory, insert_note,
     insert_time, wire_time_hierarchy,
 };
 use memory_proto::nodes::{AbstractTime, Entity, Event, Fact, Memory, Note, Time};
 use memory_proto::schema::EMBEDDING_DIM;
-use memory_proto::MemoryDb;
 
 fn ts() -> DateTime<chrono::Utc> {
-    DateTime::from_timestamp(1700000000, 0).unwrap()
+    DateTime::from_timestamp(1_700_000_000, 0).unwrap()
 }
 
 // ─── Note tests ─────────────────────────────────────────────────────
@@ -267,8 +267,8 @@ fn test_time() -> Time {
     Time {
         id: "t-2026-11-03".to_string(),
         granularity: "day".to_string(),
-        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(), // 2026-11-03
-        ends_at: Some(DateTime::from_timestamp(1762214400, 0).unwrap()),
+        starts_at: DateTime::from_timestamp(1_762_214_400, 0).unwrap(), // 2026-11-03
+        ends_at: Some(DateTime::from_timestamp(1_762_214_400, 0).unwrap()),
         label: "November 3, 2026".to_string(),
         label_resolved: "2026-11-03".to_string(),
         learned_at: ts(),
@@ -345,8 +345,8 @@ fn wire_time_hierarchy_creates_rel() {
     let parent = Time {
         id: "t-test-year".to_string(),
         granularity: "year".to_string(),
-        starts_at: DateTime::from_timestamp(1767225600, 0).unwrap(),
-        ends_at: Some(DateTime::from_timestamp(1798761599, 0).unwrap()),
+        starts_at: DateTime::from_timestamp(1_767_225_600, 0).unwrap(),
+        ends_at: Some(DateTime::from_timestamp(1_798_761_599, 0).unwrap()),
         label: "2026".to_string(),
         label_resolved: "2026".to_string(),
         learned_at: ts(),
@@ -359,8 +359,8 @@ fn wire_time_hierarchy_creates_rel() {
     let child = Time {
         id: "t-test-day".to_string(),
         granularity: "day".to_string(),
-        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(),
-        ends_at: Some(DateTime::from_timestamp(1762214400, 0).unwrap()),
+        starts_at: DateTime::from_timestamp(1_762_214_400, 0).unwrap(),
+        ends_at: Some(DateTime::from_timestamp(1_762_214_400, 0).unwrap()),
         label: "Nov 3".to_string(),
         label_resolved: "2026-11-03".to_string(),
         learned_at: ts(),
@@ -748,7 +748,7 @@ fn link_before_creates_edge() {
     let time = Time {
         id: "t-morning".to_string(),
         granularity: "day".to_string(),
-        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(),
+        starts_at: DateTime::from_timestamp(1_762_214_400, 0).unwrap(),
         ends_at: None,
         label: "morning".to_string(),
         label_resolved: "2026-11-03 morning".to_string(),
@@ -797,7 +797,7 @@ fn link_valid_from_to_fact() {
     let time = Time {
         id: "t-valid".to_string(),
         granularity: "day".to_string(),
-        starts_at: DateTime::from_timestamp(1762214400, 0).unwrap(),
+        starts_at: DateTime::from_timestamp(1_762_214_400, 0).unwrap(),
         ends_at: None,
         label: "nov 3".to_string(),
         label_resolved: "2026-11-03".to_string(),
