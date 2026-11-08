@@ -24,12 +24,13 @@ jobs:
 
       - name: Clippy
         working-directory: memory-proto
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       # --test-threads=1: lbug's buffer manager maps a very large virtual
       # region per open DB, and ~17 parallel test processes each opening a DB
       # exhausts the address space (mmap 8 TiB) and flakes the suite.
-      # Running serially makes the run deterministic.
+      # Running serially makes the run deterministic. The llm_live suite
+      # skips itself unless WUNICORM_LLM_LIVE is set, which CI never does.
       - name: Test
         working-directory: memory-proto
         run: cargo test -- --test-threads=1
