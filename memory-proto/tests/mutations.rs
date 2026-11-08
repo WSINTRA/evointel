@@ -196,6 +196,8 @@ fn test_memory() -> Memory {
         is_ongoing: false,
         significance: "first time understanding the concept".to_string(),
         emotions: vec!["excitement".to_string(), "determined".to_string()],
+        function_tag: None,
+        run_id: None,
         reflection: "feels like a breakthrough moment".to_string(),
         label: "learned rust ownership".to_string(),
         label_resolved: "rust ownership model comprehension".to_string(),

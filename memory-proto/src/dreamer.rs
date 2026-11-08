@@ -199,7 +199,13 @@ pub fn run_dream(
             continue;
         }
         nodes_written += 1;
-        apply_judgment(conn, &judgment, &mut nodes_written, &mut errors);
+        apply_judgment(
+            conn,
+            &judgment,
+            &spec.run_id,
+            &mut nodes_written,
+            &mut errors,
+        );
     }
 
     // ── Observe: the delta, honestly counted ──
@@ -253,10 +259,12 @@ pub fn run_dream(
 }
 
 /// Applies one judgment's writes. Every write is idempotent; every
-/// failure is recorded and the dream continues.
+/// failure is recorded and the dream continues. Kept memories are
+/// stamped with the run id — the provenance of the choice, W's ledger.
 fn apply_judgment(
     conn: &Connection,
     judgment: &DreamJudgment,
+    run_id: &str,
     nodes_written: &mut usize,
     errors: &mut Vec<String>,
 ) {
@@ -276,7 +284,9 @@ fn apply_judgment(
         write_node(insert_event(conn, ev), "event", &ev.id, errors);
     }
     for m in &judgment.memories {
-        write_node(insert_memory(conn, m), "memory", &m.id, errors);
+        let mut m = m.clone();
+        m.run_id = Some(run_id.to_string());
+        write_node(insert_memory(conn, &m), "memory", &m.id, errors);
     }
     for t in &judgment.times {
         write_node(insert_time(conn, t), "time", &t.id, errors);

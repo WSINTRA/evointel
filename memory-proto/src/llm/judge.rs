@@ -235,6 +235,17 @@ impl LlmJudge {
         }
         let mut memories: Vec<Memory> = vec![];
         for (i, (resolved, m)) in memories_raw.iter().enumerate() {
+            // The function attribution is W's evidence — an unknown tag
+            // is a broken instrument, and the whole judgment is refused
+            // (recorded as a run fault, house pattern), never silently
+            // defaulted.
+            if crate::axes::Function::parse(m.function.trim()).is_none() {
+                return Err(format!(
+                    "memory '{}' carries an unknown function '{}'",
+                    m.label.trim(),
+                    m.function.trim()
+                ));
+            }
             let id = format!("m-{}", slug(resolved));
             labels.insert(resolved.clone(), NodeRef::new(id.clone(), "Memory"));
             memories.push(Memory {
@@ -247,6 +258,8 @@ impl LlmJudge {
                 significance: m.significance.trim().to_string(),
                 emotions: m.emotions.clone(),
                 reflection: m.reflection.trim().to_string(),
+                function_tag: Some(m.function.trim().to_string()),
+                run_id: None, // stamped by the dreamer's write path
                 label: m.label.trim().to_string(),
                 label_resolved: resolved.clone(),
                 label_embedding: Some(next_embedding_n(
@@ -381,6 +394,10 @@ pub struct RawMemory {
     #[serde(default)]
     pub emotions: Vec<String>,
     pub reflection: String,
+    /// The dominant lens of the reflection — one of the four functions.
+    /// The grammar constrains the enum; serde plus the mapping's own
+    /// parse are the fence for anything that slips through.
+    pub function: String,
     pub label: String,
 }
 

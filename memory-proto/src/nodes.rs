@@ -128,6 +128,13 @@ pub struct Memory {
     pub significance: String,
     pub emotions: Vec<String>,
     pub reflection: String,
+    /// The dominant lens of the reflection — one of the four functions
+    /// (`axes::Function` spellings). The extractor's attribution; W's
+    /// position is measured from these choices.
+    pub function_tag: Option<String>,
+    /// The dream run that chose to keep this memory — the provenance of
+    /// the choice. Stamped by the dreamer's write path, not the judge.
+    pub run_id: Option<String>,
     pub label: String,
     pub label_resolved: String,
     pub label_embedding: Option<Vec<f32>>,

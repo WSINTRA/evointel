@@ -57,3 +57,11 @@ pub(crate) fn string_list_to_value(items: &[String]) -> Value {
         items.iter().map(|s| Value::String(s.clone())).collect(),
     )
 }
+
+/// Converts an optional string to a lbug Value (String or typed Null).
+pub(crate) fn opt_string_to_value(s: Option<&str>) -> Value {
+    match s {
+        Some(s) => Value::String(s.to_string()),
+        None => Value::Null(LogicalType::String),
+    }
+}

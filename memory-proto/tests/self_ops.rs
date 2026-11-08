@@ -349,6 +349,8 @@ fn grounds_links_self_state_to_memory_evidence() {
         significance: "why it matters".to_string(),
         emotions: vec![],
         reflection: "what to make of it".to_string(),
+        function_tag: Some("feeling".to_string()),
+        run_id: None,
         label: "kept memory".to_string(),
         label_resolved: "kept memory".to_string(),
         label_embedding: None,

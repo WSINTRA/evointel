@@ -3,7 +3,10 @@ use lbug::{Connection, Value};
 use crate::db::DbResult;
 use crate::nodes::{Entity, Event, Fact, Memory};
 
-use super::{chrono_to_time, chrono_to_time_opt, embedding_to_value, string_list_to_value};
+use super::{
+    chrono_to_time, chrono_to_time_opt, embedding_to_value, opt_string_to_value,
+    string_list_to_value,
+};
 
 // ─── Entity ─────────────────────────────────────────────────────────
 
@@ -173,6 +176,8 @@ const INSERT_MEMORY: &str = "MERGE (n:Memory {id: $id}) SET \
     n.significance = $significance, \
     n.emotions = $emotions, \
     n.reflection = $reflection, \
+    n.function_tag = $function_tag, \
+    n.run_id = $run_id, \
     n.label = $label, \
     n.label_resolved = $label_resolved, \
     n.label_embedding = $embedding, \
@@ -197,6 +202,11 @@ pub fn insert_memory(conn: &Connection, memory: &Memory) -> DbResult<()> {
             ("significance", Value::String(memory.significance.clone())),
             ("emotions", string_list_to_value(&memory.emotions)),
             ("reflection", Value::String(memory.reflection.clone())),
+            (
+                "function_tag",
+                opt_string_to_value(memory.function_tag.as_deref()),
+            ),
+            ("run_id", opt_string_to_value(memory.run_id.as_deref())),
             ("label", Value::String(memory.label.clone())),
             (
                 "label_resolved",

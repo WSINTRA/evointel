@@ -57,6 +57,7 @@ const CANNED: &str = r#"{
     "significance": "recurring emotional state",
     "emotions": ["anxiety"],
     "reflection": "the void is silence talking back",
+    "function": "feeling",
     "label": "job search anxiety"
   }],
   "times": [{"iso": "2026-11-03"}, {"iso": "2026-11"}],
@@ -155,6 +156,12 @@ fn maps_a_canned_judgment_end_to_end() {
         judgment.memories[0].reflection,
         "the void is silence talking back"
     );
+    assert_eq!(
+        judgment.memories[0].function_tag,
+        Some("feeling".to_string()),
+        "the extractor's attribution lands on the memory"
+    );
+    assert_eq!(judgment.memories[0].run_id, None, "the dreamer stamps it");
     assert_eq!(judgment.memories[0].label_embedding, Some(one_hot(4)));
 
     // The calendar: both dates plus the parent chain, wired.
@@ -311,6 +318,24 @@ fn propagates_embed_failures() {
 
     let err = judge_it(&db, &recorded, &test_note()).unwrap_err();
     assert!(err.contains("embedder down"), "{err}");
+}
+
+#[test]
+fn an_unknown_function_refuses_the_whole_judgment() {
+    // The function attribution is W's evidence — a broken instrument
+    // refuses the judgment (recorded as a run fault), never silently
+    // defaults to a pole.
+    let dir = tempfile::tempdir().unwrap();
+    let db = open_test_db(&dir.path().join("t.db"));
+    let recorded = RecordedClient::new();
+    recorded.push_chat(Ok(
+        CANNED.replace("\"function\": \"feeling\"", "\"function\": \"valorating\"")
+    ));
+    recorded.push_embed(Ok(vec![one_hot(0); 6]));
+
+    let err = judge_it(&db, &recorded, &test_note()).unwrap_err();
+    assert!(err.contains("unknown function"), "{err}");
+    assert!(err.contains("valorating"), "{err}");
 }
 
 #[test]

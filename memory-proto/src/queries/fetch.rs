@@ -21,6 +21,14 @@ fn get_string(props: &[(String, Value)], key: &str) -> String {
     }
 }
 
+/// An optional string column: `None` when absent or NULL.
+fn get_string_opt(props: &[(String, Value)], key: &str) -> Option<String> {
+    match get_prop(props, key) {
+        Some(Value::String(s)) => Some(s.clone()),
+        _ => None,
+    }
+}
+
 fn get_f64(props: &[(String, Value)], key: &str) -> f64 {
     match get_prop(props, key) {
         Some(Value::Double(d)) => *d,
@@ -200,6 +208,8 @@ pub fn get_memory(conn: &Connection, id: &str) -> DbResult<Option<Memory>> {
             significance: get_string(props, "significance"),
             emotions: get_string_list(props, "emotions"),
             reflection: get_string(props, "reflection"),
+            function_tag: get_string_opt(props, "function_tag"),
+            run_id: get_string_opt(props, "run_id"),
             label: get_string(props, "label"),
             label_resolved: get_string(props, "label_resolved"),
             label_embedding: get_embedding(props, "label_embedding"),
