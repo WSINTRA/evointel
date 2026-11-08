@@ -496,3 +496,5 @@ green.
 | Compensation | W = damped core (α) + fast component (k_eff, rigidity-gated) targeting dyad balance; constants in one block, logged per run |
 | Sermon voice | Speaks from the self from day one; movement language only; numbers stripped at material construction, not by prompt |
 | Migration style | Idempotent DDL batches + version marker written after each batch; transactional DDL only if proven safe |
+| Anisotropy | Corpus-mean centering (all-but-the-top) before pole geometry — the raw space failed the gate at 0.94 opposite-pole cosine; centered, T·F −0.35, S·N −0.27 |
+| Corpus calibration | The gate is the review instrument: v1's first draft failed on 7 cross-register exemplars (contrasts, diagnostics, mood); the revision keeps every pole pure register — LOO 1.0/1.0/1.0/0.9 |

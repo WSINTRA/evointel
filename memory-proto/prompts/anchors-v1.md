@@ -8,9 +8,30 @@ The Jungian function axes, as geometry. Two bipolar pairs:
   (concrete presence ↔ pattern and possibility)
 
 Each pole is seeded from the exemplar texts below. A pole's anchor is the
-centroid (mean, L2-normalized) of its exemplars' embeddings, computed at
-seed time and stored as `FunctionAnchor` rows. A text's coordinate on an
-axis is `cos(x, own_pole) − cos(x, opposite_pole)`.
+centroid (mean, L2-normalized) of its exemplars' embeddings **after
+corpus-mean centering** — anisotropy removal, the standard all-but-the-top
+postprocessing — computed at seed time and stored as `FunctionAnchor`
+rows. A raw embedding's coordinate on an axis is
+`cos(x_c, own_pole) − cos(x_c, opposite_pole)`, where `x_c` is the
+embedding centered on the same corpus mean.
+
+**Why centering (the gate's own finding):** EmbeddingGemma-2's raw space
+is anisotropic — every pole centroid sits 0.93–0.95 cosine from every
+other, and the raw corpus *failed* the gate (judgment T·F 0.940,
+perception S·N 0.942). After centering, the poles face away from each
+other and the corpus passes with margin (v1, live server, Task 22):
+T·F −0.351, S·N −0.266; leave-one-out 1.00 thinking, 1.00 feeling,
+1.00 sensing, 0.90 intuiting. The mean is computed from the exemplars,
+never trained — still pure geometry, recomputable from the stored anchor
+rows alone.
+
+**Calibration note:** the first draft of this corpus failed the gate on
+seven exemplars that contaminated their own register — feeling texts
+that invoked numbers and efficiency, a sensing text that reasoned
+diagnostically ("so the click isn't…"), intuiting texts that touched
+mood and memory. The lesson, now a rule for future revisions: an
+exemplar **does** its function; it never contrasts against, reasons
+about, or narrates a neighboring one.
 
 The exemplars are written in the pole's *register* — a thinking-pole text
 does thinking; it never says "this is thinking." First person, short,
@@ -31,11 +52,11 @@ pole.
 ## thinking
 
 - If the deadline moves to Friday, the critical path shifts to the supplier, and everything downstream re-plans around it.
-- The cheaper option wins once I subtract what the extra hour of setup actually costs.
+- Once I subtract the setup hour from both options, the price difference inverts.
 - I keep turning the argument over, checking each step for what it assumes.
 - Two of these three claims contradict, so at most one of them survives.
 - The rule is fine; the exception would swallow the rule, so the exception goes.
-- I want the numbers before I care about the pitch.
+- I want to see the derivation, not just the conclusion it arrives at.
 - Where does this break if ten times as many people show up?
 - That conclusion only follows if we accept the premise nobody stated.
 - I ran the timeline backward from the launch date and the training slot disappears.
@@ -44,10 +65,10 @@ pole.
 ## feeling
 
 - I keep coming back to how that message landed — it mattered more than the meeting it interrupted.
-- The numbers say take the offer; something in me says this team is worth staying for.
-- I don't want the efficient version if the efficient version is cold.
+- Everyone said take the offer; the part of me that knows what I'd be leaving kept saying no.
+- I chose the slower way because the faster way left everyone feeling like traffic.
 - What tipped me wasn't the argument — it was that she trusted me with it.
-- Losing the ritual would save an hour a week and cost the week its shape.
+- I stayed longer than I needed to, because leaving would have felt like taking something back.
 - It felt like a small betrayal, filed under logistics.
 - I can defend the decision and still regret its cost to the person who wanted the other outcome.
 - The gift was wrong in every practical way and exactly right anyway.
@@ -57,7 +78,7 @@ pole.
 ## sensing
 
 - The meeting room is on three, second door past the elevator, and the radiator clunks every twenty minutes or so.
-- New battery in, and it still clicks — so the click isn't the battery.
+- New battery in this morning; the click is still there, same rhythm as before.
 - I wrote down the street name because the map kept redrawing itself.
 - The bread's darker on the bottom than the last batch; the oven runs hot on the left.
 - Rain started around four — proper rain, the kind that pools at the curb.
@@ -73,9 +94,9 @@ pole.
 - I can't defend it yet, but the whole thing reads like a preamble to something else.
 - The interesting move isn't in this position; it's the position it quietly sets up three moves later.
 - Everyone's answering the question nobody is asking — the real question is two questions upstream.
-- It feels like the early days of a story I've seen before, and I mostly remember how that story ended.
+- I can feel the next chapter of this forming before anything in it is true yet.
 - The pieces don't connect yet, but they keep leaning toward each other.
 - What if the constraint isn't the constraint — what if it's the door?
-- I read the room's mood two beats before anyone said anything.
+- I knew the room had turned before anyone said anything — the pattern gave it away two beats early.
 - The pattern wants completing; the missing piece is shaped like the thing I set aside last spring.
 - Something is trying to happen here, and my job is to stay out of its way long enough to see what.
