@@ -1,7 +1,7 @@
 use std::fs;
 
 use chrono::DateTime;
-use memory_proto::message::{shelf_check, write_message, Citation, Insight, Message, MessageKind};
+use memory_proto::message::{Citation, Insight, Message, MessageKind, shelf_check, write_message};
 use memory_proto::mutations::NodeRef;
 use memory_proto::queries::Drift;
 
@@ -98,25 +98,31 @@ fn shelf_check_rejects_contentless_artifacts() {
     let mut msg = sample_message("run-1");
     msg.insights = vec![];
     let path = write_message(&msg, &outbox).unwrap();
-    assert!(shelf_check(&path, "run-1")
-        .unwrap_err()
-        .contains("no insights"));
+    assert!(
+        shelf_check(&path, "run-1")
+            .unwrap_err()
+            .contains("no insights")
+    );
 
     // No citations — evidence-free assertions must not ship.
     let mut msg = sample_message("run-2");
     msg.citations = vec![];
     let path = write_message(&msg, &outbox).unwrap();
-    assert!(shelf_check(&path, "run-2")
-        .unwrap_err()
-        .contains("cites no source"));
+    assert!(
+        shelf_check(&path, "run-2")
+            .unwrap_err()
+            .contains("cites no source")
+    );
 
     // Empty body.
     let mut msg = sample_message("run-3");
     msg.body = "   ".to_string();
     let path = write_message(&msg, &outbox).unwrap();
-    assert!(shelf_check(&path, "run-3")
-        .unwrap_err()
-        .contains("body is empty"));
+    assert!(
+        shelf_check(&path, "run-3")
+            .unwrap_err()
+            .contains("body is empty")
+    );
 }
 
 #[test]
