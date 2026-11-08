@@ -18,6 +18,22 @@ pub enum EdgeType {
 }
 
 impl EdgeType {
+    /// All 12 edge types, in schema declaration order.
+    pub const ALL: [Self; 12] = [
+        Self::Contains,
+        Self::Similar,
+        Self::HasProperty,
+        Self::LeadsTo,
+        Self::Causes,
+        Self::Prevents,
+        Self::BecauseOf,
+        Self::Before,
+        Self::After,
+        Self::During,
+        Self::ValidFrom,
+        Self::ValidTo,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Contains => "Contains",
