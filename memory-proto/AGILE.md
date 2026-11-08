@@ -31,8 +31,8 @@ src/
     mod.rs
     notes.rs         # insert_note
     content.rs       # insert_entity, insert_fact, insert_event, insert_memory
-    time.rs          # insert_time, insert_abstract_time, wire_time_hierarchy
-    edges.rs         # link_* functions (the 3-step pattern)
+    time_ops.rs      # insert_time, insert_abstract_time, wire_time_hierarchy
+    edge_links.rs    # link_* functions (the 3-step pattern)
   queries/
     mod.rs
     fetch.rs         # get_node by id (returns typed struct)
@@ -144,7 +144,7 @@ MERGE (n:Note {id: $id}) SET
 
 ### Task 5: Time nodes + hierarchy
 
-**What:** `mutations/time.rs` with `insert_time`, `insert_abstract_time`, `wire_time_hierarchy`.
+**What:** `mutations/time_ops.rs` with `insert_time`, `insert_abstract_time`, `wire_time_hierarchy`.
 
 **Details:**
 - `insert_time`: MERGE a `Time` node with `granularity`, `starts_at`, `ends_at`
@@ -152,7 +152,7 @@ MERGE (n:Note {id: $id}) SET
 - `wire_time_hierarchy(parent_id, child_id)`: `MATCH (p:Time {id: $p}), (c:Time {id: $c}) MERGE (p)-[:TIME_HIERARCHY]->(c)`
 - This is the first mutation that creates a REL (not an edge-node) — simple 2-node REL, different pattern from Task 6-8
 
-**Files:** `src/mutations/time.rs`, update `src/mutations/mod.rs`
+**Files:** `src/mutations/time_ops.rs`, update `src/mutations/mod.rs`
 
 **Tests:**
 - `insert_time_roundtrip`
@@ -165,7 +165,7 @@ MERGE (n:Note {id: $id}) SET
 
 ### Task 6: Edge linking — structural edges (helper + Contains, Similar, HasProperty)
 
-**What:** `mutations/edges.rs`. This is the **key complexity-hider**. Introduces:
+**What:** `mutations/edge_links.rs`. This is the **key complexity-hider**. Introduces:
 
 1. **`NodeRef`** struct: `{ id: String, label: String }` — a typed reference to a graph node (the label is the Cypher table name like `"Note"`, `"Entity"`). This is what lets the Cypher do `MATCH (a:Note {id: $id})`.
 
@@ -180,7 +180,7 @@ MERGE (n:Note {id: $id}) SET
    - `link_similar(conn, from: &NodeRef, to: &NodeRef, props: &Similar) -> DbResult<String>`
    - `link_has_property(conn, from: &NodeRef, to: &NodeRef, props: &HasProperty) -> DbResult<String>`
 
-**Files:** `src/mutations/edges.rs`, update `src/mutations/mod.rs`
+**Files:** `src/mutations/edge_links.rs`, update `src/mutations/mod.rs`
 
 **Tests:**
 - `link_contains_creates_edge_node_and_rels`: insert Note + Entity, link them, verify: (a) Contains node exists with correct props, (b) FROM_Contains rel exists, (c) TO_Contains rel exists
@@ -193,14 +193,14 @@ MERGE (n:Note {id: $id}) SET
 
 ### Task 7: Edge linking — causal edges
 
-**What:** Add `link_leads_to`, `link_causes`, `link_prevents`, `link_because_of` to `mutations/edges.rs`.
+**What:** Add `link_leads_to`, `link_causes`, `link_prevents`, `link_because_of` to `mutations/edge_links.rs`.
 
 **Details:**
 - All follow the same 3-step pattern via the helper from Task 6
 - Each passes its specific `SET` clauses and params
 - ~40-60 lines (4 functions × ~12 lines)
 
-**Files:** `src/mutations/edges.rs`
+**Files:** `src/mutations/edge_links.rs`
 
 **Tests:**
 - One roundtrip test per function (4 tests), verifying edge node + both rels
@@ -211,13 +211,13 @@ MERGE (n:Note {id: $id}) SET
 
 ### Task 8: Edge linking — temporal edges
 
-**What:** Add `link_before`, `link_after`, `link_during`, `link_valid_from`, `link_valid_to` to `mutations/edges.rs`.
+**What:** Add `link_before`, `link_after`, `link_during`, `link_valid_from`, `link_valid_to` to `mutations/edge_links.rs`.
 
 **Details:**
 - Same pattern. Temporal edges connect to `Time`/`AbstractTime` nodes primarily.
 - ~50-70 lines (5 functions)
 
-**Files:** `src/mutations/edges.rs`
+**Files:** `src/mutations/edge_links.rs`
 
 **Tests:**
 - `link_before_creates_edge`: insert Note + Time, link with Before, verify

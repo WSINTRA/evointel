@@ -1,0 +1,9 @@
+[alias]
+# Why: the lbug tests run as threads in a single process, and each open lbug
+# DB maps a ~8 TiB virtual region. ~17 concurrent opens exhaust the process
+# address space, and which thread's `open` fails is nondeterministic -> the
+# suite flakes under the default parallel runner. Serial execution is green.
+#
+# Usage: `cargo tst`  (a `test` alias is not possible — Cargo won't let an
+# alias shadow the built-in `test` command). CI runs serially explicitly.
+tst = "test -- --test-threads=1"
