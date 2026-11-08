@@ -24,7 +24,7 @@ The through-line of v1 that must survive: **the ability to add new tasks is a fi
 1. [North star — what we keep](#1-north-star--what-we-keep)
 2. [The shape](#2-the-shape)
 3. [The notes app](#3-the-notes-app)
-4. [Security & privacy — the key model](#4-security--privacy--the-key-model)
+4. [Security & privacy](#4-security--privacy)
 5. [The architecture](#5-the-architecture)
 6. [The knowledge graph](#6-the-knowledge-graph)
 7. [The two note spaces](#7-the-two-note-spaces)
@@ -48,7 +48,6 @@ v1 earned trust through properties that are about *how* it runs, not *what* it t
 | **Two kinds of truth** | *Declaration* (what should happen) is stored apart from *observation* (what did). This split is what stopped the "stamped success while writing no file" failure. |
 | **Guards in code, not in a prompt** | Shelf check, freshness, outbound gate, fault ledger, redaction — enforced by code, never requested of the model. |
 | **Two channels, deliberately split** | The reflective **letter** (about itself, omits a stale artifact and says so) and the mechanical **attention card** (only when a human is needed). |
-| **Encrypted at rest** | Memories, reflections — and now *everything* — sit under a user-held key. |
 | **The Jungian framework, as a lens** | Shadow, tensions, archetypes, the six evolution rules — repurposed to read *you*, not discarded. In v1 the SELF was a closed loop with no outside anchor; v2 makes **your notes the external evidence base**, so "no revision without observation" finally has real observations to draw on. |
 
 ---
@@ -85,18 +84,16 @@ You have it open and you type into it the way you already do. It holds the heter
 
 ---
 
-## 4. Security & privacy — the key model
+## 4. Security & privacy
 
-First-class. The password is **not a login the server checks** — it is a **key-derivation input**. It unlocks a key derived in your browser, and the server never sees it. This inverts v1, where the decryption password was a server secret in `.env` (`PGP_PASSWORD`).
+Single-user, local-first. Your Mac is the server. The security model relies on the OS, not on an app-level crypto layer.
 
-1. **First run — set a password.** You choose a master password. The app derives a **recovery seed phrase** you store somewhere safe (wallet, password manager, paper).
-2. **Later runs — the password unlocks.** It re-derives the key on-device and decrypts existing content. Forget it, and the seed re-derives the key.
-3. **At rest — everything encrypted.** Notes, memories, reflections and the graph all sit under the same key (e.g. `AES-GCM`) as ciphertext. **No server master key.**
-4. **At the model — redaction first.** Whatever is handed to an LLM is scrubbed before it leaves the machine, and you can see exactly what was hidden.
+- **At rest** — FileVault (full-disk encryption) protects the database file. The OS handles screen locks and session security.
+- **In transit** — Tailscale provides an encrypted private mesh between your devices. The app never exposes to the public internet.
+- **At the model** — redaction before any LLM call. Whatever is handed to a model is scrubbed of credentials and personal values, and you can see exactly what was hidden. (Especially relevant if a non-local LLM is configured.)
+- **No app-level encryption** — no client-side zero-knowledge, no password/seed/key-derivation. The daemon owns the data and processes it in plaintext. The threat model is "what if my Mac is stolen" — FileVault covers that.
 
-**Client-side, zero-knowledge.** The key is derived on your device (password → KDF → key). Note content is fetched, decrypted and rendered **in the browser** — the shell is server-rendered, the content is not. "Wrong password" is detected client-side, not by a server 401.
-
-> **The price, stated plainly.** Key management is yours, exactly like a crypto wallet. That is the cost of "privacy is first class" — so the key UX has to be right: the seed shown once, no silent re-derivation, a way to rotate.
+> **Revisit if the product grows.** If this becomes a distributed or cloud-hosted service, the trust model changes and encryption at the application layer becomes necessary. For a personal, single-user, Mac-first daemon — it is complexity without a matching threat.
 
 ---
 
@@ -108,7 +105,7 @@ Your notes flow down a spine: stored, watched, structured into a graph, read for
   NOTES APP          Mac tray -> localhost web app (Tiptap, month-grouped, CTAs)
       |  writes
       v
-  NOTES DB           your notes  +  wunicorm's notes-on-you   (encrypted at rest)
+  NOTES DB           your notes  +  wunicorm's notes-on-you
       |  watches continuously  +  full runs on schedule
       v
   SORTER             one job: pull new/changed content, queue it for processing
@@ -127,13 +124,13 @@ Your notes flow down a spine: stored, watched, structured into a graph, read for
 
   SCHEDULER  drives the sorter cadence, the full runs, and the insight services (working-day vs overnight)
   CONFIG     in the app: AI backend (any OpenAPI) · cadence · output channels · visual toggle
-  SECURITY   password + seed · client-side zero-knowledge · redaction before any LLM call
+  SECURITY   FileVault at rest · Tailscale in transit · redaction before any LLM call
 ```
 
 **Layer notes**
 
 - **Notes App** — the input surface (§3).
-- **Notes DB** — the source of truth. Holds both note spaces, encrypted at rest.
+- **Notes DB** — the source of truth. Holds both note spaces.
 - **Sorter** — a constantly-running watcher. Its *one* job: pull new/changed content from the Notes DB and hand it to processing. It is cheap and continuous.
 - **Processing** — the LLM (LangGraph or similar) that makes the judgments: what the concepts are, which of the four pillars connect them, and where each sits in semantic space-time. This is where the OpenAPI-agnostic AI wrapper lives.
 - **Graph DB** — the Intelligence DB / the memory (§6).
@@ -162,11 +159,24 @@ The graph is **not a keyword index**. Each concept sits at a point in a combined
 
 > **This is the v1 representation.** Deeper concepts on the semantic space-time model are coming (position, embedding, time, and how drift is measured) — the graph section should be revisited when they land.
 
+### The function space (landed — memory-proto, Tasks 20-31)
+
+The Jungian functions are now **geometry in the graph itself**, not just prompt language. Two bipolar axes — judgment (thinking ↔ feeling) and perception (sensing ↔ intuiting) — built from contrastive anchor centroids seeded from a frozen, gate-verified exemplar corpus (`prompts/anchors-v1.md`, embedded and versioned as `FunctionAnchor` rows; re-seeding deactivates, never deletes). Every note projects to a signed 2-dim coordinate — the corpus-mean centering (anisotropy removal) is part of the method, verified by a live separability gate before anything downstream trusted it.
+
+**Two points, one frame:**
+
+- **U — the user's psyche.** The windowed centroid of note coordinates. Read, never steered, never claimed.
+- **W — Wunicorm's voice.** The position implied by its *choices*: what it kept, dropped, and emphasized, tagged by function. A damped **core** (hysteresis — personality, not mood; months, not windows) plus a fast **compensation** component gated by U's **rigidity** (straightness of trajectory over ≥3 windows — stuckness, never direction). When U is balanced, W simply accompanies; a healthy user gets a companion, a stuck one a counterweight.
+
+The dream cycle gained a deterministic **self pass** between writing judgments and reflection: it measures the notes onto the axes, writes both `SelfState`s, wires `SELF_TRAJECTORY`, and grounds every positional claim in its evidence notes and kept memories via `Grounds` edges — derived, never authoritative, rebuildable from the recorded choices. The sermon speaks from the self reading in **movement language only** ("toward thinking, away from feeling"); numbers are stripped at material construction, never entrusted to the prompt, and the user's movement is never attributed to the system.
+
+The standing guards: rigidity-not-direction · damped prescription · the auditor is audited · no claimed effects · the discarded is data (the `DreamRun` choice ledger) · no revision without observation. Full record: `PAPER_TRAIL.md` D-002.
+
 ---
 
 ## 7. The two note spaces
 
-There are two note spaces in one store. You write the first; the intelligence writes the second. Both are encrypted under the same key, and **the model of you is inspectable** — you can read what it has learned about you.
+There are two note spaces in one store. You write the first; the intelligence writes the second. **The model of you is inspectable** — you can read what it has learned about you.
 
 - **Your notes** (`source: user`) — the input; the living stream you type.
 - **Wunicorm's notes-on-you** (`source: wunicorm`) — the model; inferred, evolving, inspectable. ("What I noticed: your job search is shifting from anxious to strategic." "Habit: you plan house tasks on Sunday evenings.")
@@ -239,14 +249,13 @@ The notes app grows out of **`tees_valley_digital`** — a small, clean full-sta
 
 | Reuse | Refactor / strip | Net-new |
 |---|---|---|
-| App shell + Mantine theme | Remove the public SSR surface, SEO, slug | Client-side zero-knowledge encryption |
-| Tiptap rich-text editor | Remove the publish workflow | Password + recovery seed flow |
-| List / detail views | Invert auth to private-by-default | The daemon API (bearer token + sync) |
-| Ports & adapters + DI data layer | Add the notes / todos / planner domain | The sorter / processing / graph layer |
-| Single-user auth as the unlock gate | SSR the shell, render content client-side | The insight & sermon services |
-| Ops: Docker, CI, error/security plumbing | | |
+| App shell + Mantine theme | Remove the public SSR surface, SEO, slug | The daemon API (bearer token + sync) |
+| Tiptap rich-text editor | Remove the publish workflow | The sorter / processing / graph layer |
+| List / detail views | Remove the auth/session layer (OS handles access) | The insight & sermon services |
+| Ports & adapters + DI data layer | Add the notes / todos / planner domain | The task engine (re-homed from v1) |
+| Ops: Docker, CI, error/security plumbing | Invert to private-by-default, localhost-only | |
 
-**The crux tension:** the fork's auth is *server-side* (prove identity to the server; data plaintext in Postgres). v2 needs *client-side zero-knowledge* (key derived in the browser; server stores ciphertext only; seed is user-held recovery). So the existing login/session machinery is reused as the app's *unlock/lock UX and session layer*, but a **client crypto layer is built from scratch** (WebCrypto KDF → AES-GCM, encrypt at the editor boundary, decrypt at render), and the server's ability to ever hold the key is removed. This is the single biggest net-new piece.
+**The crux change:** the fork's auth is *server-side* (prove identity to the server). v2 is single-user and local-first — the OS handles access (FileVault, screen lock, Tailscale). The existing login/session machinery is **removed**, not inverted. The app assumes the operator is already authenticated to the machine.
 
 **Open tech choices (decide at build time):**
 - **Database** — SQLite (single-file, truly local-first) vs. Postgres (keep the fork as-is). Drizzle covers both.
@@ -259,7 +268,6 @@ The notes app grows out of **`tees_valley_digital`** — a small, clean full-sta
 
 This is a rough plan on purpose. The places where the architecture is still soft:
 
-- **Daemon key access** *(security)* — how a background daemon decrypts zero-knowledge notes when the app is closed. A secure OS slot (Keychain / Secure Enclave) while the Mac is unlocked, or a defined "unlocked-for-the-daemon" window. The seed stays user-held either way.
 - **Database choice** *(stack)* — SQLite vs. Postgres. A portability call.
 - **The space-time model** *(graph)* — the deeper concepts behind semantic space-time. To come.
 - **"Overnight" = machine-on** *(honest limit)* — on a local daemon the thorough pass runs when the Mac is awake or idle. An accepted consequence of local-first + Mac-first; stated, not hidden.
@@ -281,7 +289,7 @@ Decisions made during the planning session:
 | AI backend | Configurable against any OpenAPI spec; own thin wrapper | Decouple the engine from any one model/CLI. |
 | Memory | Semantic space-time graph, 4 pillars, an agentic memory layer | Beyond append-only dated files. |
 | Cadence | Overnight dreamer (thorough) + working-day pass (light) | Configurable processing frequency. |
-| Security | Password + recovery seed, client-side zero-knowledge | Privacy is first class; the key lives with the user. |
+| Security | OS-level only (FileVault, Tailscale, redaction) | Single-user local daemon; no app-level encryption needed. Revisit if distributed. |
 | Extensibility | Adding/proposing tasks stays first-class | The property that made v1 good software. |
 | Foundation | Fork `tees_valley_digital` | Reuse shell, auth, editor, data pattern; strip the blog/SEO layer. |
 | Document: database | **Left open** | Both presented; decide at build. |

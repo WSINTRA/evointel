@@ -8,6 +8,11 @@ layer, the live judge, the sermon's living voice) — is **complete**. Its recor
 lives in git history: the previous version of this file and the commit sequence
 through `chore: updated docs`. This list replaces it.
 
+**Tasks 20-32 (the function space) are complete** — axes, gate, self tables,
+psyche reads, extractor seam, choice ledger, self pass, sermon voice, full
+eval, demo, and the paper trail (D-002). The concept's full record:
+`PAPER_TRAIL.md` D-002 and `plan.md` §6.
+
 ## What this list is: the Function Space
 
 The Jungian functions move out of the prompts and into the graph itself:
