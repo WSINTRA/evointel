@@ -2,54 +2,94 @@
 
 > A notes and planner that uses evolving intelligence to augment daily life and work.
 
-**v1** was a self-running engine that evolved a *bot's* identity from its own reflections. **v2** points that same engine at *you*: your notes become the input, the model being built is a model of your life, and the output is **augmentation** — a daily sermon, reflections, and proposed tasks you confirm. The engine stays; the subject of the engine changes.
+**v1** was a self-running engine that evolved a *bot's* identity from its own reflections. **v2** points that same engine at *you*: your Mac Notes become the input, the model being built is a model of your life, and the output is **augmentation** — a daily sermon, reflections, and eventually proposed tasks you confirm. The engine stays; the subject of the engine changes.
 
-## The shape
+## The current app
 
-Local-first and single-user, Jellyfin-style: a resident daemon on your Mac serving a web app on `localhost`, reachable from your own devices over Tailscale. Never exposed to the public internet.
+Wunicorm is now a **local-only, single-user macOS daemon**. You keep writing in Mac Notes. A menu-bar app reads your notes on a daily schedule, runs the memory pipeline, and returns the result through a macOS notification and a note in the `Wunicorm` folder.
 
+```text
+Mac Notes
+   │  osascript, on schedule
+   ▼
+Ingress ── new/changed notes by Core Data ID + modification date
+   ▼
+Scheduler ── once per day, configurable; default 22:00
+   ▼
+Dreamer ── LLM judge → LadybugDB graph → reflection → sermon
+   ▼
+macOS notification + sermon in the Wunicorm Notes folder
+
+Menu-bar tray: idle · dreaming · notification
 ```
-NOTES APP -> NOTES DB -> SORTER -> PROCESSING -> GRAPH DB -> INSIGHT SERVICES
+
+There is **no web app, localhost server, Tailscale, Tiptap editor, or separate notes database**. Configuration is a TOML file; Mac Notes is the input and output surface.
+
+## Current status
+
+### Implemented and verified
+
+- **Memory layer** — semantic space-time graph on LadybugDB, typed nodes and four-pillar edges, idempotent mutations, traversal/temporal/drift/snapshot queries, and HNSW semantic search.
+- **Function space** — Jungian axes, corpus-mean-centered geometry, user and Wunicorm positions, rigidity, compensation, and the deterministic self pass.
+- **Demo dream pipeline** — the §8 job-search story runs end to end through the judge, graph, reflection, and sermon; the full hermetic eval covers rebuildability.
+- **Notes ingress** — reads Mac Notes through osascript, skips `Wunicorm` and `Recently Deleted`, strips HTML to text, and queues only new or changed notes.
+- **Daemon shell** — persistent scheduler and state, once-per-day guard, notification and Notes-writer output, and graceful shutdown.
+- **Menu-bar tray** — a working `tao` macOS event loop with idle, dreaming, and notification states. The tray's appearance has been visually confirmed.
+- **macOS packaging** — `Wunicorm.app` and a current-architecture DMG with vendored OpenSSL libraries, an ad-hoc signature, and verified bundle, signature, and image checksum.
+- **Tests** — 177 tests pass; Clippy is clean.
+
+### Not yet verified or deferred
+
+- **A complete live scheduled dream against real Mac Notes and the local LLM servers is still pending.** Component tests, the demo pipeline, packaging checks, and tray acceptance do not prove that full cycle.
+- **Task proposals, note CTAs, and the general task engine** are deferred.
+- **Launch at login** is not configured by the app or DMG.
+- **Developer ID signing, notarization, and universal Intel/Apple Silicon builds** are deferred. The current DMG is ad-hoc signed for the build machine's architecture.
+- **Working-day/continuous ingestion, email, attention cards, and other output channels** remain design work.
+- **Redaction before remote LLM use** is still a stub; the current target is local LLM servers.
+
+## Run and install
+
+### Development
+
+```bash
+cd memory-proto
+cargo run                 # resident menu-bar daemon
+cargo run --example demo  # live §8 demo against the local LLM servers
+cargo test -- --test-threads=1
+cargo clippy --all-targets -- -D warnings
 ```
 
-Your notes flow down that spine: stored, watched, structured into a knowledge graph, read for insight, and returned as augmentation. Three cross-cutting layers — scheduling, config, security — span the whole thing.
+The daemon creates its configuration on first run at:
 
-Of that spine, the prototype currently realizes the **storage → graph → insight** stages: the memory layer (semantic space-time graph), the **Dreamer** (the overnight pass: judge notes, write the graph idempotently, reflect, write the morning message into an outbox), and the LLM layer behind them (local, OpenAI-compatible). The notes app, daemon/scheduler, sorter, and delivery channels are designed but not yet built.
+```text
+~/Library/Application Support/memory-proto/config.toml
+```
 
-The memory layer is the novel part: a **semantic space-time knowledge graph** where nodes carry both a position by meaning (embedding) and a position in time, and edges are typed by four pillars — *similarity, containment, property attribution, causality*. Because time is a dimension of position, a thought's drift across its neighborhood is visible — that's how habits and thinking patterns are inferred.
+The default dream time is `22:00`. The LLM defaults expect chat on `:9931` and embeddings on `:9932`; override them with `WUNICORM_CHAT_URL`, `WUNICORM_CHAT_MODEL`, `WUNICORM_EMBED_URL`, and `WUNICORM_EMBED_MODEL`, or use the `[llm]` config section. The demo writes to `memory-proto/demo-data/`; the daemon uses `~/Library/Application Support/memory-proto/`.
+
+### macOS DMG
+
+```bash
+cd memory-proto
+./scripts/package-macos.sh
+```
+
+The script writes `target/packaging/Wunicorm-<version>-<arch>.dmg`. Mount it and drag `Wunicorm.app` to `Applications`. On first use, allow Notes automation and notification access. Quit any CLI daemon before launching the app so two processes do not share the database.
+
+See [`memory-proto/README.md`](memory-proto/README.md) for packaging internals and data-preservation details.
 
 ## What's in this repo
 
 | Path | What it is |
 |---|---|
-| [`plan.md`](plan.md) | The full design document — architecture, decisions log, open threads. Start here. |
-| [`index.html`](index.html) | The visual version of the plan. |
-| [`memory-proto/`](memory-proto) | Active prototype: the memory layer **and the Dreamer** in Rust on LadybugDB — judge notes with a local LLM, write the graph, reflect, write the sermon. See its [README](memory-proto/README.md). |
-| [`memory-proto/AGILE.md`](memory-proto/AGILE.md) | The prototype's work breakdown — design principles, task list, commit sequence. |
-| [`memory-proto/prompts/`](memory-proto/prompts) | The Dreamer's prompts and extraction schema — data, not code. |
+| [`plan.md`](plan.md) | Current design, implementation boundaries, decisions, and open threads. |
+| [`index.html`](index.html) | Visual companion to the design overview. |
+| [`memory-proto/`](memory-proto) | The Rust daemon, memory layer, Dreamer, tray, and macOS packaging. |
+| [`memory-proto/README.md`](memory-proto/README.md) | Daemon, demo, test, and DMG instructions. |
+| [`memory-proto/AGILE.md`](memory-proto/AGILE.md) | Work breakdown and verification status. |
+| [`memory-proto/prompts/`](memory-proto/prompts) | Extraction, schema, sermon, and anchor prompts — data, not code. |
 | [`AGENTS.md`](AGENTS.md) | Conventions for AI coding agents working on this project. |
-| [`PAPER_TRAIL.md`](PAPER_TRAIL.md) | Concrete decisions made during planning and development. |
+| [`PAPER_TRAIL.md`](PAPER_TRAIL.md) | Append-only record of concrete planning and development decisions. |
 | [`PROJECT_TRACKER.md`](PROJECT_TRACKER.md) | How the GitHub project board is run. |
 
-## Current status
-
-The vertical slice of the overnight pass is **working end to end**. The §8 story runs for real: three dated notes go through the Dreamer, a local LLM judges them under grammar constraint, nodes and four-pillar edges are written idempotently (deterministic slugs — re-judged concepts MERGE onto the same node), the run is observed via pre-dream snapshots and a dream report, and the morning's sermon comes out with citations to source notes and drift evidence ("your job search is shifting from anxious to strategic").
-
-Specifics:
-
-- **Memory layer** — full ontology (7 node types, 12 edge-node types, polymorphic relations, time tree), typed structs, idempotent mutations, traversal/temporal/drift/snapshot queries, and HNSW semantic search.
-- **LLM layer** — OpenAI-compatible client against local `llama.cpp` servers (chat + embeddings, no data leaves the machine); prompts as data; hermetic replay client for tests.
-- **Not yet built** — the notes app UI, daemon/scheduler, sorter, delivery channels (email / notification), and the task engine. The redaction seam exists but is a stub.
-
-## Development
-
-```bash
-cd memory-proto
-cargo run        # the live demo dream — the §8 story against the real servers
-cargo test       # hermetic suites (no servers touched)
-cargo clippy     # lint
-```
-
-`cargo run` is not a schema init anymore — it's the §8 demo dream. It needs the local `llama.cpp` servers up (chat on `:9931`, embeddings on `:9932`; override with `WUNICORM_CHAT_URL` / `WUNICORM_EMBED_URL` and the `_MODEL` variants). Each judgment runs ~1-2 minutes of thinking. It writes `demo-data/dream.db`, `demo-data/outbox/`, and `demo-data/dream-log.jsonl` — and re-running converges instead of duplicating (the idempotency demo). `cargo test` is hermetic and CI-safe; the live probes are opt-in via `WUNICORM_LLM_LIVE=1`.
-
-CI (clippy + tests) runs on push/PR to `main` via [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+CI runs Clippy and tests on push/PR to `main` via [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
