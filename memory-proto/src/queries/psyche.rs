@@ -58,12 +58,13 @@ pub fn user_position(
             continue;
         };
         let at = time_to_chrono(at);
-        if at >= window.0 && at <= window.1 {
-            if let (Value::Double(j), Value::Double(p)) = (&row[1], &row[2]) {
-                sum.0 += j;
-                sum.1 += p;
-                n += 1;
-            }
+        if at >= window.0
+            && at <= window.1
+            && let (Value::Double(j), Value::Double(p)) = (&row[1], &row[2])
+        {
+            sum.0 += j;
+            sum.1 += p;
+            n += 1;
         }
     }
     if n == 0 {
@@ -71,6 +72,9 @@ pub fn user_position(
     }
     #[allow(clippy::cast_precision_loss)] // note counts stay far below 2^24
     let n = n as f64;
+    // f64 column storage back to the f32 the axes speak — the same
+    // precision the coordinates were written with.
+    #[allow(clippy::cast_possible_truncation)]
     Ok(Some(((sum.0 / n) as f32, (sum.1 / n) as f32)))
 }
 
@@ -144,7 +148,7 @@ fn trajectory(conn: &Connection, subject: &str, span: usize) -> DbResult<Vec<Tra
             })
         })
         .collect();
-    points.sort_by(|a, b| a.window_start.cmp(&b.window_start));
+    points.sort_by_key(|p| p.window_start);
     if points.len() > span {
         points.drain(..points.len() - span);
     }
