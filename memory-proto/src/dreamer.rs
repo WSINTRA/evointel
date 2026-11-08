@@ -20,20 +20,21 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use lbug::{Connection, Value};
 
-use crate::axes::Function;
+use crate::axes::{Axis, Function, RIGIDITY_SPAN};
 use crate::db::DbResult;
-use crate::edges::{Contains, HasProperty, LeadsTo, Similar};
+use crate::edges::{Contains, Grounds, HasProperty, LeadsTo, Similar};
 use crate::message::{Citation, Insight, Message, MessageKind, shelf_check, write_message};
 use crate::mutations::{
     NodeRef, insert_dream_run, insert_entity, insert_event, insert_fact, insert_memory,
-    insert_note, insert_time, link_contains, link_has_property, link_leads_to, link_similar,
-    wire_time_hierarchy,
+    insert_note, insert_self_state, insert_time, link_contains, link_grounds, link_has_property,
+    link_leads_to, link_similar, set_note_coordinates, wire_self_trajectory, wire_time_hierarchy,
 };
-use crate::nodes::{DreamRun, Entity, Event, Fact, Memory, Note, Time};
-use crate::observability::{DreamReport, append_dream_report};
+use crate::nodes::{DreamRun, Entity, Event, Fact, Memory, Note, SelfState, Time};
+use crate::observability::{DreamReport, SelfPassReport, append_dream_report};
 use crate::queries::{
-    concept_drift, connected_notes, events_in_range, get_entity, graph_snapshot,
-    structural_similarity,
+    active_axis_frame, concept_drift, connected_notes, events_in_range, evolve_wunicorm,
+    function_drift, get_entity, graph_snapshot, rigidity, structural_similarity, user_position,
+    wunicorm_observed,
 };
 use crate::vector::semantic_search;
 
@@ -253,6 +254,17 @@ pub fn run_dream(
         }
     }
 
+    // ── Work the self: positions on the axes, the W update, and the
+    // provenance that ties every claim to nodes. Runs before the
+    // observe snapshot so the dream's writes (states, grounds) are
+    // honestly counted in the delta. Quiet days don't work the self —
+    // there is nothing to measure and no one to compensate.
+    let self_pass = if spec.queue.is_empty() {
+        None
+    } else {
+        work_the_self(conn, spec, &mut nodes_written, &mut errors)
+    };
+
     // ── Observe: the delta, honestly counted ──
     let after = match graph_snapshot(conn) {
         Ok(s) => Some(s),
@@ -291,6 +303,7 @@ pub fn run_dream(
         message_written,
         shelf_ok,
         similarity_to_prev,
+        self_pass,
     };
 
     // ── The ledger: this run joins the permanent record ──
@@ -312,6 +325,398 @@ fn kept_index(f: Function) -> usize {
         Function::Sensing => 2,
         Function::Intuiting => 3,
     }
+}
+
+// ─── The self pass ───────────────────────────────────────────────────
+
+/// Works the self: measures the run's notes onto the axes, writes U's
+/// window state, evolves W (damped core + rigidity-gated compensation),
+/// and grounds every positional claim in the nodes it came from.
+///
+/// The dream never dies for the self's sake — every failure is recorded
+/// and the pass degrades: unseeded anchors, an unmeasurable window, a
+/// missing ledger each skip their part, honestly named.
+fn work_the_self(
+    conn: &Connection,
+    spec: &DreamSpec,
+    nodes_written: &mut usize,
+    errors: &mut Vec<String>,
+) -> Option<SelfPassReport> {
+    // The axes themselves. Unseeded anchors are a quiet skip, not a
+    // fault: the self layer is opt-in — until anchors are seeded, a DB
+    // dreams exactly as it did before. Failures *after* opting in are
+    // errors.
+    let frame = match active_axis_frame(conn) {
+        Ok(Some(f)) => f,
+        Ok(None) => return None,
+        Err(e) => {
+            errors.push(format!("self pass: anchor load failed: {e}"));
+            return None;
+        }
+    };
+
+    // The window being worked: the drift comparison's "to" window when
+    // present, else the queue's own span.
+    let queue_span = || {
+        let first = spec.queue.iter().map(|n| n.created_at).min()?;
+        let last = spec.queue.iter().map(|n| n.created_at).max()?;
+        Some((first, last))
+    };
+    let window = match spec.drift_windows {
+        Some((_, to)) => to,
+        None => queue_span()?,
+    };
+    let now = Utc::now();
+
+    // 1. Measure the run's notes onto the axes. A note without an
+    // embedding stays unmeasured — no signal is not a center.
+    let mut measured: Vec<String> = vec![];
+    for note in &spec.queue {
+        let Some(embedding) = note.content_embedding.as_ref() else {
+            continue;
+        };
+        let (judgment, perception) = frame.coordinates(embedding);
+        match set_note_coordinates(conn, &note.id, f64::from(judgment), f64::from(perception)) {
+            Ok(()) => measured.push(note.id.clone()),
+            Err(e) => errors.push(format!(
+                "self pass: note {} coordinate write failed: {e}",
+                note.id
+            )),
+        }
+    }
+
+    // 2. U's position for the window, and its state on the trajectory.
+    // U is read, never steered — the decomposition fields stay zero on
+    // user states; they are W's record.
+    let user = match user_position(conn, window) {
+        Ok(p) => p,
+        Err(e) => {
+            errors.push(format!("self pass: user position read failed: {e}"));
+            None
+        }
+    };
+    let user_state_id = format!("self-user-{}", window.0.timestamp());
+    if let Some(position) = user {
+        let state = SelfState {
+            id: user_state_id.clone(),
+            subject: "user".to_string(),
+            window_start: window.0,
+            window_end: window.1,
+            judgment_coord: f64::from(position.0),
+            perception_coord: f64::from(position.1),
+            judgment_core: 0.0,
+            perception_core: 0.0,
+            judgment_comp: 0.0,
+            perception_comp: 0.0,
+            rigidity_judgment: 0.0,
+            rigidity_perception: 0.0,
+            #[allow(clippy::cast_possible_wrap)] // note counts stay tiny
+            evidence_kept: measured.len() as i64,
+            evidence_dropped: 0,
+            learned_at: now,
+            created_at: now,
+            updated_at: now,
+            layer: 4,
+            context: spec.run_id.clone(),
+        };
+        match insert_self_state(conn, &state) {
+            Ok(()) => *nodes_written += 1,
+            Err(e) => errors.push(format!("self pass: user state write failed: {e}")),
+        }
+        wire_trajectory(
+            conn,
+            "user",
+            window.0,
+            &user_state_id,
+            nodes_written,
+            errors,
+        );
+        for note_id in &measured {
+            ground_evidence(
+                conn,
+                &user_state_id,
+                note_id,
+                "Note",
+                "window",
+                &spec.run_id,
+                now,
+                nodes_written,
+                errors,
+            );
+        }
+    }
+
+    // 3. W: observed from this run's ledger, evolved against the damped
+    // core, compensated only against a rigid user. No user position →
+    // no compensation (nothing to lean against), never an invented one.
+    let observed = match wunicorm_observed(conn, &spec.run_id) {
+        Ok(o) => o,
+        Err(e) => {
+            errors.push(format!("self pass: choice ledger read failed: {e}"));
+            return None;
+        }
+    };
+    let Some(observed) = observed else {
+        errors.push("self pass skipped — no choice ledger this run".to_string());
+        return None;
+    };
+    let prev_core = match wunicorm_prev_core(conn) {
+        Ok(c) => c,
+        Err(e) => {
+            errors.push(format!("self pass: W core read failed: {e}"));
+            (0.0, 0.0)
+        }
+    };
+    // Rigidity reads the trajectory including the state just written —
+    // the user's stuckness now, not last month's.
+    let rigidities = (
+        rigidity(conn, "user", Axis::Judgment, RIGIDITY_SPAN).unwrap_or(0.0),
+        rigidity(conn, "user", Axis::Perception, RIGIDITY_SPAN).unwrap_or(0.0),
+    );
+    let decomposition =
+        evolve_wunicorm(prev_core, observed, user.unwrap_or((0.0, 0.0)), rigidities);
+
+    let (kept_total, dropped_total) = match dream_run_evidence(conn, &spec.run_id) {
+        Ok((k, d)) => (k, d),
+        Err(e) => {
+            errors.push(format!("self pass: ledger evidence read failed: {e}"));
+            (0, 0)
+        }
+    };
+    let w_state_id = format!("self-wunicorm-{}", window.0.timestamp());
+    let w_state = SelfState {
+        id: w_state_id.clone(),
+        subject: "wunicorm".to_string(),
+        window_start: window.0,
+        window_end: window.1,
+        judgment_coord: f64::from(decomposition.position.0),
+        perception_coord: f64::from(decomposition.position.1),
+        judgment_core: f64::from(decomposition.core.0),
+        perception_core: f64::from(decomposition.core.1),
+        judgment_comp: f64::from(decomposition.comp.0),
+        perception_comp: f64::from(decomposition.comp.1),
+        rigidity_judgment: f64::from(rigidities.0),
+        rigidity_perception: f64::from(rigidities.1),
+        evidence_kept: kept_total,
+        evidence_dropped: dropped_total,
+        learned_at: now,
+        created_at: now,
+        updated_at: now,
+        layer: 4,
+        context: spec.run_id.clone(),
+    };
+    match insert_self_state(conn, &w_state) {
+        Ok(()) => *nodes_written += 1,
+        Err(e) => errors.push(format!("self pass: wunicorm state write failed: {e}")),
+    }
+    wire_trajectory(
+        conn,
+        "wunicorm",
+        window.0,
+        &w_state_id,
+        nodes_written,
+        errors,
+    );
+    // Provenance: the memories this run chose to keep — W's evidence is
+    // its choices.
+    match kept_memory_ids(conn, &spec.run_id) {
+        Ok(ids) => {
+            for memory_id in ids {
+                ground_evidence(
+                    conn,
+                    &w_state_id,
+                    &memory_id,
+                    "Memory",
+                    "choice",
+                    &spec.run_id,
+                    now,
+                    nodes_written,
+                    errors,
+                );
+            }
+        }
+        Err(e) => errors.push(format!("self pass: kept memory read failed: {e}")),
+    }
+
+    // 4. The drift reading — U's latest step on the axes.
+    let drift = match function_drift(conn, "user") {
+        Ok(d) => d.map(|d| (d.judgment, d.perception)),
+        Err(e) => {
+            errors.push(format!("self pass: function drift read failed: {e}"));
+            None
+        }
+    };
+
+    Some(SelfPassReport {
+        user_position: user,
+        wunicorm_core: decomposition.core,
+        wunicorm_comp: decomposition.comp,
+        wunicorm_position: decomposition.position,
+        rigidity: rigidities,
+        drift,
+        evidence_kept: kept_total,
+        evidence_dropped: dropped_total,
+    })
+}
+
+/// A timestamp column value → chrono, the boundary swap.
+fn chrono_timestamp(v: &Value) -> Option<DateTime<Utc>> {
+    match v {
+        Value::Timestamp(t) => {
+            Some(DateTime::from_timestamp(t.unix_timestamp(), 0).expect("valid unix timestamp"))
+        }
+        _ => None,
+    }
+}
+
+/// The most recent state of one subject from a strictly earlier window.
+fn latest_state_before(
+    conn: &Connection,
+    subject: &str,
+    window_start: DateTime<Utc>,
+) -> DbResult<Option<String>> {
+    let mut stmt =
+        conn.prepare("MATCH (s:SelfState {subject: $subject}) RETURN s.id, s.window_start;")?;
+    let result = conn.execute(
+        &mut stmt,
+        vec![("subject", Value::String(subject.to_string()))],
+    )?;
+    let mut best: Option<(DateTime<Utc>, String)> = None;
+    for row in result {
+        let [Value::String(id), ts] = row.as_slice() else {
+            continue;
+        };
+        let Some(at) = chrono_timestamp(ts) else {
+            continue;
+        };
+        if at < window_start && best.as_ref().is_none_or(|(t, _)| at > *t) {
+            best = Some((at, id.clone()));
+        }
+    }
+    Ok(best.map(|(_, id)| id))
+}
+
+/// W's previous core — the damped position this run evolves from.
+/// `(0.0, 0.0)` when W has never stood before.
+fn wunicorm_prev_core(conn: &Connection) -> DbResult<(f32, f32)> {
+    let mut stmt = conn.prepare(
+        "MATCH (s:SelfState {subject: 'wunicorm'}) RETURN s.window_start, s.judgment_core, s.perception_core;",
+    )?;
+    let result = conn.execute(&mut stmt, vec![])?;
+    let mut best: Option<(DateTime<Utc>, f32, f32)> = None;
+    for row in result {
+        let [ts, Value::Double(j), Value::Double(p)] = row.as_slice() else {
+            continue;
+        };
+        let Some(at) = chrono_timestamp(ts) else {
+            continue;
+        };
+        // f64 columns were written from f32 — same precision back.
+        #[allow(clippy::cast_possible_truncation)]
+        let candidate = (at, *j as f32, *p as f32);
+        if best.as_ref().is_none_or(|(t, _, _)| candidate.0 > *t) {
+            best = Some(candidate);
+        }
+    }
+    Ok(best.map_or((0.0, 0.0), |(_, j, p)| (j, p)))
+}
+
+/// The ledger's evidence counts: `(total kept, dropped)`.
+fn dream_run_evidence(conn: &Connection, run_id: &str) -> DbResult<(i64, i64)> {
+    let mut stmt = conn.prepare(
+        "MATCH (r:DreamRun {id: $id}) RETURN r.kept_t + r.kept_f + r.kept_s + r.kept_n, r.dropped_total;",
+    )?;
+    let result = conn.execute(&mut stmt, vec![("id", Value::String(run_id.to_string()))])?;
+    for row in result {
+        if let [Value::Int64(kept), Value::Int64(dropped)] = row.as_slice() {
+            return Ok((*kept, *dropped));
+        }
+    }
+    Ok((0, 0))
+}
+
+/// The ids of the memories this run chose to keep.
+fn kept_memory_ids(conn: &Connection, run_id: &str) -> DbResult<Vec<String>> {
+    let mut stmt = conn.prepare("MATCH (m:Memory {run_id: $id}) RETURN m.id;")?;
+    let result = conn.execute(&mut stmt, vec![("id", Value::String(run_id.to_string()))])?;
+    Ok(result
+        .into_iter()
+        .filter_map(|row| match row.first() {
+            Some(Value::String(id)) => Some(id.clone()),
+            _ => None,
+        })
+        .collect())
+}
+
+/// Wires the trajectory edge from the subject's previous state, fenced
+/// like every other link — a dangling reference is a recorded fault.
+fn wire_trajectory(
+    conn: &Connection,
+    subject: &str,
+    window_start: DateTime<Utc>,
+    next_id: &str,
+    nodes_written: &mut usize,
+    errors: &mut Vec<String>,
+) {
+    let prev = match latest_state_before(conn, subject, window_start) {
+        Ok(Some(p)) => p,
+        Ok(None) => return, // first state — the trajectory starts here
+        Err(e) => {
+            errors.push(format!("self pass: trajectory read failed: {e}"));
+            return;
+        }
+    };
+    let from = NodeRef::new(prev.clone(), "SelfState");
+    let to = NodeRef::new(next_id.to_string(), "SelfState");
+    link_edge(
+        conn,
+        "SELF_TRAJECTORY",
+        &from,
+        &to,
+        || wire_self_trajectory(conn, &prev, next_id).map(|()| String::new()),
+        nodes_written,
+        errors,
+    );
+}
+
+/// Grounds one state in one piece of evidence — the provenance edge,
+/// fenced like every other link.
+#[allow(clippy::too_many_arguments)]
+fn ground_evidence(
+    conn: &Connection,
+    state_id: &str,
+    evidence_id: &str,
+    evidence_label: &str,
+    evidence_kind: &str,
+    run_id: &str,
+    now: DateTime<Utc>,
+    nodes_written: &mut usize,
+    errors: &mut Vec<String>,
+) {
+    let edge_id = format!("g-{state_id}-{evidence_id}");
+    let from = NodeRef::new(state_id.to_string(), "SelfState");
+    let to = NodeRef::new(evidence_id.to_string(), evidence_label);
+    let props = Grounds {
+        id: edge_id.clone(),
+        evidence_kind: evidence_kind.to_string(),
+        label: "grounds".to_string(),
+        label_resolved: "self grounded in evidence".to_string(),
+        learned_at: now,
+        expire_at: None,
+        created_at: now,
+        updated_at: now,
+        layer: 0,
+        context: run_id.to_string(),
+    };
+    link_edge(
+        conn,
+        "Grounds",
+        &from,
+        &to,
+        || link_grounds(conn, &from, &to, &props),
+        nodes_written,
+        errors,
+    );
 }
 
 /// Applies one judgment's writes. Every write is idempotent; every

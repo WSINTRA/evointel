@@ -14,7 +14,9 @@
 use chrono::{DateTime, Utc};
 use lbug::{Connection, Value};
 
-use crate::axes::{Axis, COMPENSATION_BASE, CORE_DAMPING, DROP_DILUTION, RIGIDITY_THRESHOLD};
+use crate::axes::{
+    Axis, AxisFrame, COMPENSATION_BASE, CORE_DAMPING, DROP_DILUTION, Function, RIGIDITY_THRESHOLD,
+};
 use crate::db::DbResult;
 
 use super::fetch::time_to_chrono;
@@ -40,6 +42,32 @@ pub struct Decomposition {
 }
 
 // ─── Positions ───────────────────────────────────────────────────────
+
+/// The frame the active anchors define — the axes the self pass
+/// measures with. `None` when no anchors are seeded (or a pole is
+/// empty): the caller's cue to degrade, not to invent geometry.
+pub fn active_axis_frame(conn: &Connection) -> DbResult<Option<AxisFrame>> {
+    let result = conn
+        .query("MATCH (a:FunctionAnchor) WHERE a.active = true RETURN a.function, a.embedding;")?;
+    let mut evidence: Vec<(Function, Vec<f32>)> = vec![];
+    for row in result {
+        let (Value::String(f), Value::Array(_, items)) = (&row[0], &row[1]) else {
+            continue;
+        };
+        let Some(f) = Function::parse(f) else {
+            continue;
+        };
+        let embedding: Vec<f32> = items
+            .iter()
+            .filter_map(|v| match v {
+                Value::Float(x) => Some(*x),
+                _ => None,
+            })
+            .collect();
+        evidence.push((f, embedding));
+    }
+    Ok(AxisFrame::from_exemplars(&evidence))
+}
 
 /// U's position: the centroid of measured note coordinates whose
 /// `created_at` falls in the window (notes bucket by `created_at` —

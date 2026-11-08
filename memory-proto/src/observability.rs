@@ -48,6 +48,35 @@ pub struct DreamReport {
     /// snapshot was taken. `None` means "not measured" — which is not
     /// the same as "stable".
     pub similarity_to_prev: Option<f32>,
+    /// The self pass's observation: the two points on the function axes
+    /// after this dream worked the self. `None` on quiet days, when the
+    /// anchors are unseeded, or when the user's window is unmeasurable —
+    /// each recorded as a run error, the dream never dies for the
+    /// self's sake. `#[serde(default)]` keeps older ledger lines
+    /// readable.
+    #[serde(default)]
+    pub self_pass: Option<SelfPassReport>,
+}
+
+/// The self pass's observation of one dream: where the two points stand
+/// after the work. The auditor, observed.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SelfPassReport {
+    /// U's position in this window, `(judgment, perception)`. `None`
+    /// when unmeasurable — which skips the run's compensation, never
+    /// invents a center.
+    pub user_position: Option<(f32, f32)>,
+    /// W's decomposition after this run: core, compensation, position.
+    pub wunicorm_core: (f32, f32),
+    pub wunicorm_comp: (f32, f32),
+    pub wunicorm_position: (f32, f32),
+    /// U's straightness per axis at the time compensation was gated.
+    pub rigidity: (f32, f32),
+    /// The function-space drift between U's two latest states.
+    pub drift: Option<(f32, f32)>,
+    /// How much evidence this run's positions stand on.
+    pub evidence_kept: i64,
+    pub evidence_dropped: i64,
 }
 
 /// Decides whether a dream was a nightmare.

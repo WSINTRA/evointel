@@ -354,6 +354,10 @@ pub const RIGIDITY_THRESHOLD: f32 = 0.7;
 /// it anywhere.
 pub const DROP_DILUTION: f32 = 0.5;
 
+/// How many trailing windows the straightness index reads over. Four —
+/// roughly a month of weekly windows, a season of daily ones.
+pub const RIGIDITY_SPAN: usize = 4;
+
 /// The gate's measurements of a corpus: do the poles actually separate
 /// in embedding space? Measured from the same exemplar evidence
 /// [`AxisFrame::from_exemplars`] consumes.

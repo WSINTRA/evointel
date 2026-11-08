@@ -20,6 +20,7 @@ fn good_report() -> DreamReport {
         message_written: true,
         shelf_ok: true,
         similarity_to_prev: Some(0.93),
+        self_pass: None,
     }
 }
 
