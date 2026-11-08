@@ -4,6 +4,7 @@ pub mod meta;
 pub mod migrations;
 pub mod poly_relations;
 pub mod relations;
+pub mod self_edges;
 pub mod self_nodes;
 pub mod time_tree;
 

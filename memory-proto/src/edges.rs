@@ -15,11 +15,13 @@ pub enum EdgeType {
     During,
     ValidFrom,
     ValidTo,
+    Grounds,
 }
 
 impl EdgeType {
-    /// All 12 edge types, in schema declaration order.
-    pub const ALL: [Self; 12] = [
+    /// All 13 edge types, in schema declaration order (Grounds, the
+    /// self layer's provenance edge, arrived with migration batch v3).
+    pub const ALL: [Self; 13] = [
         Self::Contains,
         Self::Similar,
         Self::HasProperty,
@@ -32,6 +34,7 @@ impl EdgeType {
         Self::During,
         Self::ValidFrom,
         Self::ValidTo,
+        Self::Grounds,
     ];
 
     pub fn label(self) -> &'static str {
@@ -48,6 +51,7 @@ impl EdgeType {
             Self::During => "During",
             Self::ValidFrom => "ValidFrom",
             Self::ValidTo => "ValidTo",
+            Self::Grounds => "Grounds",
         }
     }
 
@@ -245,6 +249,27 @@ pub struct ValidTo {
     pub precision: String,
     pub confidence: f64,
     pub termination: String,
+    pub label: String,
+    pub label_resolved: String,
+    pub learned_at: DateTime<Utc>,
+    pub expire_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub layer: i16,
+    pub context: String,
+}
+
+// ─── Self-layer edges ────────────────────────────────────────────────
+
+/// The provenance edge: a `SelfState` grounded in its evidence — the
+/// notes that filled its window (`evidence_kind = "window"`) or the
+/// memories its run chose to keep (`evidence_kind = "choice"`). Every
+/// positional claim traces to nodes through these.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Grounds {
+    pub id: String,
+    /// `window` or `choice`.
+    pub evidence_kind: String,
     pub label: String,
     pub label_resolved: String,
     pub learned_at: DateTime<Utc>,

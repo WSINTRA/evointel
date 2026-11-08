@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::DbResult;
 use crate::edges::{
-    After, BecauseOf, Before, Causes, Contains, During, EdgeType, HasProperty, LeadsTo, Prevents,
-    Similar, ValidFrom, ValidTo,
+    After, BecauseOf, Before, Causes, Contains, During, EdgeType, Grounds, HasProperty, LeadsTo,
+    Prevents, Similar, ValidFrom, ValidTo,
 };
 
 use super::{chrono_to_time, chrono_to_time_opt};
@@ -677,6 +677,59 @@ pub fn link_valid_to(
             ("prec", Value::String(props.precision.clone())),
             ("conf", Value::Double(props.confidence)),
             ("term", Value::String(props.termination.clone())),
+            ("label", Value::String(props.label.clone())),
+            (
+                "label_resolved",
+                Value::String(props.label_resolved.clone()),
+            ),
+            (
+                "learned_at",
+                Value::Timestamp(chrono_to_time(&props.learned_at)),
+            ),
+            ("expire_at", chrono_to_time_opt(props.expire_at.as_ref())),
+            (
+                "created_at",
+                Value::Timestamp(chrono_to_time(&props.created_at)),
+            ),
+            (
+                "updated_at",
+                Value::Timestamp(chrono_to_time(&props.updated_at)),
+            ),
+            ("layer", Value::Int16(props.layer)),
+            ("context", Value::String(props.context.clone())),
+        ],
+    )
+}
+
+// ─── Self-layer edges ────────────────────────────────────────────────
+
+/// Links a `SelfState` to its evidence: a note (`evidence_kind =
+/// "window"`) or a kept memory (`evidence_kind = "choice"`). The
+/// provenance edge — every positional claim traces to nodes through
+/// these.
+pub fn link_grounds(
+    conn: &Connection,
+    from: &NodeRef,
+    to: &NodeRef,
+    props: &Grounds,
+) -> DbResult<String> {
+    create_edge_link(
+        conn,
+        EdgeType::Grounds,
+        from,
+        to,
+        &props.id,
+        "e.evidence_kind = $kind, \
+         e.label = $label, \
+         e.label_resolved = $label_resolved, \
+         e.learned_at = $learned_at, \
+         e.expire_at = $expire_at, \
+         e.created_at = $created_at, \
+         e.updated_at = $updated_at, \
+         e.layer = $layer, \
+         e.context = $context",
+        vec![
+            ("kind", Value::String(props.evidence_kind.clone())),
             ("label", Value::String(props.label.clone())),
             (
                 "label_resolved",

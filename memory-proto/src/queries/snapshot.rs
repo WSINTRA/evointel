@@ -31,7 +31,7 @@ pub type TimeRel = (NodeKey, NodeKey);
 /// drift is measured by `concept_drift`, not by rebuild similarity.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GraphSnapshot {
-    /// All nodes across the 7 content tables and the 12 edge tables.
+    /// All nodes across the 7 content tables and the 13 edge tables.
     pub nodes: BTreeSet<NodeKey>,
     /// Linked edges only; see [`EdgeTriple`].
     pub edges: BTreeSet<EdgeTriple>,
@@ -111,10 +111,18 @@ pub fn graph_snapshot(conn: &Connection) -> DbResult<GraphSnapshot> {
     Ok(snap)
 }
 
-/// Semantic key of a returned node: `(label name, label_resolved|content)`.
+/// Semantic key of a returned node:
+/// `(label name, label_resolved | content | id)`.
+///
+/// The `id` fallback is for the self layer: a `SelfState` carries
+/// neither `label_resolved` nor `content`, but its id is *deterministic*
+/// (subject + window) — semantic, unlike the judgment-generated ids the
+/// fingerprint must never key on.
 fn semantic_key(node: &NodeVal) -> Option<NodeKey> {
     let props = node.get_properties();
-    let name = string_prop(props, "label_resolved").or_else(|| string_prop(props, "content"))?;
+    let name = string_prop(props, "label_resolved")
+        .or_else(|| string_prop(props, "content"))
+        .or_else(|| string_prop(props, "id"))?;
     Some((node.get_label_name().clone(), name))
 }
 

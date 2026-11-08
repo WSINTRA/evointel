@@ -5,10 +5,13 @@
 use chrono::{TimeZone, Utc};
 use lbug::Value;
 use memory_proto::db::MemoryDb;
+use memory_proto::edges::Grounds;
 use memory_proto::mutations::{
-    insert_dream_run, insert_self_state, seed_function_anchors, set_note_coordinates,
+    NodeRef, insert_dream_run, insert_self_state, link_grounds, seed_function_anchors,
+    set_note_coordinates, wire_self_trajectory,
 };
 use memory_proto::nodes::{DreamRun, FunctionAnchor, Note, SelfState};
+use memory_proto::queries::graph_snapshot;
 use memory_proto::schema::{self, EMBEDDING_DIM};
 
 fn temp_db() -> (tempfile::TempDir, MemoryDb) {
@@ -257,4 +260,175 @@ fn seed_rejects_unknown_function_names() {
         &[anchor("fa-bad", "valorating", "judgment", "not a function")],
     )
     .unwrap();
+}
+
+// ─── Grounds + trajectory ────────────────────────────────────────────
+
+fn grounds(id: &str, kind: &str) -> Grounds {
+    Grounds {
+        id: id.to_string(),
+        evidence_kind: kind.to_string(),
+        label: format!("grounds {id}"),
+        label_resolved: format!("grounds-{id}"),
+        learned_at: ts(2026, 11, 30),
+        expire_at: None,
+        created_at: ts(2026, 11, 30),
+        updated_at: ts(2026, 11, 30),
+        layer: 0,
+        context: "test".to_string(),
+    }
+}
+
+fn insert_note_with_content(conn: &lbug::Connection, id: &str, content: &str) {
+    memory_proto::mutations::insert_note(
+        conn,
+        &Note {
+            id: id.to_string(),
+            content: content.to_string(),
+            content_embedding: None,
+            created_at: ts(2026, 11, 3),
+            updated_at: ts(2026, 11, 3),
+            layer: 0,
+            context: "test".to_string(),
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn grounds_links_self_state_to_note_evidence() {
+    let (_dir, db) = temp_db();
+    let conn = db.connect().unwrap();
+
+    insert_self_state(&conn, &self_state("ss-user", "user")).unwrap();
+    insert_note_with_content(&conn, "n-1", "the note that filled the window");
+
+    let from = NodeRef::new("ss-user", "SelfState");
+    let to = NodeRef::new("n-1", "Note");
+    link_grounds(&conn, &from, &to, &grounds("g-1", "window")).unwrap();
+    link_grounds(&conn, &from, &to, &grounds("g-1", "window")).unwrap();
+
+    // Edge node + both rels, no duplication on re-link.
+    assert_eq!(count(&conn, "MATCH (g:Grounds) RETURN count(g);"), 1);
+    assert_eq!(
+        count(
+            &conn,
+            "MATCH (:SelfState {id: 'ss-user'})-[r:FROM_Grounds]->(:Grounds {id: 'g-1'}) RETURN count(r);"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &conn,
+            "MATCH (:Grounds {id: 'g-1'})-[r:TO_Grounds]->(:Note {id: 'n-1'}) RETURN count(r);"
+        ),
+        1
+    );
+    // The evidence kind roundtrips.
+    let result = conn
+        .query("MATCH (g:Grounds {id: 'g-1'}) RETURN g.evidence_kind;")
+        .unwrap();
+    for row in result {
+        assert_eq!(row[0], Value::String("window".to_string()));
+    }
+}
+
+#[test]
+fn grounds_links_self_state_to_memory_evidence() {
+    let (_dir, db) = temp_db();
+    let conn = db.connect().unwrap();
+
+    insert_self_state(&conn, &self_state("ss-w", "wunicorm")).unwrap();
+    let memory = memory_proto::nodes::Memory {
+        id: "m-1".to_string(),
+        predicate: "kept".to_string(),
+        certainty: 1.0,
+        source: "test".to_string(),
+        status: "occurred".to_string(),
+        is_ongoing: false,
+        significance: "why it matters".to_string(),
+        emotions: vec![],
+        reflection: "what to make of it".to_string(),
+        label: "kept memory".to_string(),
+        label_resolved: "kept memory".to_string(),
+        label_embedding: None,
+        learned_at: ts(2026, 11, 30),
+        expire_at: None,
+        created_at: ts(2026, 11, 30),
+        updated_at: ts(2026, 11, 30),
+        layer: 4,
+        context: "test".to_string(),
+    };
+    memory_proto::mutations::insert_memory(&conn, &memory).unwrap();
+
+    link_grounds(
+        &conn,
+        &NodeRef::new("ss-w", "SelfState"),
+        &NodeRef::new("m-1", "Memory"),
+        &grounds("g-2", "choice"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        count(
+            &conn,
+            "MATCH (:Grounds {id: 'g-2'})-[r:TO_Grounds]->(:Memory {id: 'm-1'}) RETURN count(r);"
+        ),
+        1
+    );
+}
+
+#[test]
+fn trajectory_wires_consecutive_self_states() {
+    let (_dir, db) = temp_db();
+    let conn = db.connect().unwrap();
+
+    insert_self_state(&conn, &self_state("ss-a", "user")).unwrap();
+    insert_self_state(&conn, &self_state("ss-b", "user")).unwrap();
+    wire_self_trajectory(&conn, "ss-a", "ss-b").unwrap();
+    wire_self_trajectory(&conn, "ss-a", "ss-b").unwrap();
+
+    assert_eq!(
+        count(
+            &conn,
+            "MATCH (:SelfState {id: 'ss-a'})-[r:SELF_TRAJECTORY]->(:SelfState {id: 'ss-b'}) RETURN count(r);"
+        ),
+        1,
+        "MERGE: the trajectory converges, never duplicates"
+    );
+}
+
+#[test]
+fn grounds_edges_and_evidence_are_visible_to_the_snapshot() {
+    let (_dir, db) = temp_db();
+    let conn = db.connect().unwrap();
+
+    insert_self_state(&conn, &self_state("ss-user", "user")).unwrap();
+    insert_note_with_content(&conn, "n-1", "the note that filled the window");
+    link_grounds(
+        &conn,
+        &NodeRef::new("ss-user", "SelfState"),
+        &NodeRef::new("n-1", "Note"),
+        &grounds("g-1", "window"),
+    )
+    .unwrap();
+    insert_self_state(&conn, &self_state("ss-b", "user")).unwrap();
+    wire_self_trajectory(&conn, "ss-user", "ss-b").unwrap();
+
+    let snap = graph_snapshot(&conn).unwrap();
+    // The Grounds edge node is in the node inventory…
+    assert!(
+        snap.nodes
+            .contains(&("Grounds".to_string(), "grounds-g-1".to_string()))
+    );
+    // …and the triple traces the positional claim to its evidence. The
+    // SelfState keys on its deterministic id — the semantic-key fallback.
+    assert!(snap.edges.contains(&(
+        "Grounds".to_string(),
+        ("SelfState".to_string(), "ss-user".to_string()),
+        (
+            "Note".to_string(),
+            "the note that filled the window".to_string()
+        ),
+    )));
 }

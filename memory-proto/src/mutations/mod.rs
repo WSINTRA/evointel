@@ -7,11 +7,13 @@ mod time_ops;
 pub use content::{insert_entity, insert_event, insert_fact, insert_memory};
 pub use edge_links::{
     NodeRef, link_after, link_because_of, link_before, link_causes, link_contains, link_during,
-    link_has_property, link_leads_to, link_prevents, link_similar, link_valid_from, link_valid_to,
+    link_grounds, link_has_property, link_leads_to, link_prevents, link_similar, link_valid_from,
+    link_valid_to,
 };
 pub use notes::insert_note;
 pub use self_ops::{
     insert_dream_run, insert_self_state, seed_function_anchors, set_note_coordinates,
+    wire_self_trajectory,
 };
 pub use time_ops::{insert_abstract_time, insert_time, wire_time_hierarchy};
 

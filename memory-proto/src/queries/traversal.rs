@@ -76,6 +76,11 @@ pub(crate) const EDGES: &[EdgeDef] = &[
         from: &["Time", "AbstractTime"],
         to: &["Note", "Fact", "Event", "Memory"],
     },
+    EdgeDef {
+        edge: "Grounds",
+        from: &["SelfState"],
+        to: &["Note", "Memory"],
+    },
 ];
 
 fn node_id(node: &NodeVal) -> String {

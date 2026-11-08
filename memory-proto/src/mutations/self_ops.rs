@@ -195,6 +195,26 @@ pub fn insert_dream_run(conn: &Connection, run: &DreamRun) -> DbResult<()> {
     Ok(())
 }
 
+// ─── Self trajectory ─────────────────────────────────────────────────
+
+/// Wires the trajectory rel between consecutive same-subject self
+/// states — the line the self has walked. A MERGE (idempotent), the
+/// `TIME_HIERARCHY` precedent.
+pub fn wire_self_trajectory(conn: &Connection, prev_id: &str, next_id: &str) -> DbResult<()> {
+    let mut stmt = conn.prepare(
+        "MATCH (p:SelfState {id: $prev}), (n:SelfState {id: $next}) \
+         MERGE (p)-[:SELF_TRAJECTORY]->(n);",
+    )?;
+    conn.execute(
+        &mut stmt,
+        vec![
+            ("prev", Value::String(prev_id.to_string())),
+            ("next", Value::String(next_id.to_string())),
+        ],
+    )?;
+    Ok(())
+}
+
 // ─── Note coordinates (the derived columns) ──────────────────────────
 
 /// Batch-sets the derived coordinates on one note. Owned by the self

@@ -53,7 +53,11 @@ pub fn batches() -> Vec<(i64, Vec<String>)> {
                 .map(|s| (*s).to_string()),
         )
         .collect();
-    vec![(1, v1), (2, super::self_nodes::self_batch())]
+    vec![
+        (1, v1),
+        (2, super::self_nodes::self_batch()),
+        (3, super::self_edges::batch()),
+    ]
 }
 
 /// The version a fully-migrated DB carries.
