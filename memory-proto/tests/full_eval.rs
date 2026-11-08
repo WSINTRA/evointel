@@ -11,7 +11,9 @@ use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
 use memory_proto::MemoryDb;
-use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, TimeWindows, run_dream};
+use memory_proto::dreamer::{
+    DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, TimeWindows, run_dream,
+};
 use memory_proto::edges::{Contains, HasProperty, LeadsTo, Similar};
 use memory_proto::message::{Message, MessageKind, shelf_check};
 use memory_proto::mutations::NodeRef;
@@ -373,7 +375,12 @@ fn full_cycle_delivers_the_job_search_story() {
 
     let (queue, judgments) = job_search_batch("a");
     let judge = FixedJudge::new(judgments);
-    let report = run_dream(&conn, &judge, &spec("run-1", queue, &outbox, &log));
+    let report = run_dream(
+        &conn,
+        &judge,
+        &MechanicalSermon,
+        &spec("run-1", queue, &outbox, &log),
+    );
 
     // ── The dream itself: every count is exact and deterministic ──
     assert_eq!(report.notes_in, 3);
@@ -475,6 +482,7 @@ fn the_dream_is_rebuildable() {
     let report_a = run_dream(
         &conn_a,
         &FixedJudge::new(judgments_a),
+        &MechanicalSermon,
         &spec(
             "run-a",
             queue_a,
@@ -485,6 +493,7 @@ fn the_dream_is_rebuildable() {
     let report_b = run_dream(
         &conn_b,
         &FixedJudge::new(judgments_b),
+        &MechanicalSermon,
         &spec(
             "run-b",
             queue_b,
@@ -526,6 +535,7 @@ fn nightmare_is_detected_then_healed_by_rerun() {
     let report1 = run_dream(
         &conn,
         &FixedJudge::new(judgments),
+        &MechanicalSermon,
         &spec("run-1", queue, &outbox, &log),
     );
 
@@ -548,6 +558,7 @@ fn nightmare_is_detected_then_healed_by_rerun() {
     let report2 = run_dream(
         &conn,
         &FixedJudge::new(judgments2),
+        &MechanicalSermon,
         &spec("run-2", queue2, &outbox, &log),
     );
 

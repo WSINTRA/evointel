@@ -8,7 +8,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use memory_proto::db::MemoryDb;
 use memory_proto::dreamer::{DreamSpec, TimeWindows, run_dream};
-use memory_proto::llm::{LlmClient, LlmConfig, LlmJudge, UreqClient};
+use memory_proto::llm::{LlmClient, LlmConfig, LlmJudge, LlmSermonWriter, UreqClient};
 use memory_proto::nodes::Note;
 use memory_proto::schema::{self, EMBEDDING_DIM};
 use memory_proto::{extensions, vector};
@@ -100,6 +100,7 @@ fn main() {
     );
 
     let judge = LlmJudge::new(Box::new(client));
+    let sermon = LlmSermonWriter::new(Box::new(UreqClient::new(LlmConfig::from_env())));
     let spec = DreamSpec {
         run_id: "demo-1".to_string(),
         queue,
@@ -109,8 +110,8 @@ fn main() {
         dream_log: root.join("dream-log.jsonl"),
     };
 
-    println!("dreaming (three judgments, ~1-2 min each)...");
-    let report = run_dream(&conn, &judge, &spec);
+    println!("dreaming (three judgments and one sermon, ~1-2 min each)...");
+    let report = run_dream(&conn, &judge, &sermon, &spec);
     println!("\n=== dream report ===\n{report:#?}");
 
     if report.message_written {

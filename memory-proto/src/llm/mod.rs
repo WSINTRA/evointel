@@ -9,12 +9,14 @@
 //! The [`LlmClient`] trait is the seam: [`UreqClient`] talks to real
 //! servers, [`RecordedClient`] replays canned responses so tests stay
 //! hermetic. On top of it, [`LlmJudge`] implements the dreamer's
-//! `Judge` trait — the live brain. Prompts are data, not code:
-//! [`load_prompt`] reads `prompts/<name>` at runtime when present
-//! (iterate without recompiling) and falls back to the copy baked in
-//! at build time.
+//! `Judge` trait — the extraction brain — and [`LlmSermonWriter`]
+//! implements `SermonWriter` — the message's living voice. Prompts
+//! are data, not code: [`load_prompt`] reads `prompts/<name>` at
+//! runtime when present (iterate without recompiling) and falls back
+//! to the copy baked in at build time.
 
 mod judge;
+mod sermon;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -30,6 +32,7 @@ use ureq::Agent;
 use crate::schema::EMBEDDING_DIM;
 
 pub use judge::{LlmJudge, Pillar, RawJudgment};
+pub use sermon::LlmSermonWriter;
 
 /// Everything the client layer needs to know about the outside world.
 ///
@@ -424,6 +427,7 @@ fn builtin_prompt(name: &str) -> Option<&'static str> {
     Some(match name {
         "extract-v1.md" => include_str!("../../prompts/extract-v1.md"),
         "schema-v1.json" => include_str!("../../prompts/schema-v1.json"),
+        "sermon-v1.md" => include_str!("../../prompts/sermon-v1.md"),
         _ => return None,
     })
 }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use memory_proto::MemoryDb;
-use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, run_dream};
+use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, run_dream};
 use memory_proto::edges::Contains;
 use memory_proto::message::shelf_check;
 use memory_proto::mutations::NodeRef;
@@ -121,6 +121,7 @@ fn dream_writes_judgments_and_speaks() {
     let report = run_dream(
         &conn,
         &judge,
+        &MechanicalSermon,
         &spec(
             "run-1",
             vec![test_note("n1", "applied to five companies today")],
@@ -189,6 +190,7 @@ fn dangling_edge_reference_is_recorded_not_silently_dropped() {
     let report = run_dream(
         &conn,
         &judge,
+        &MechanicalSermon,
         &spec(
             "run-bad",
             vec![test_note("n1", "applied to five companies today")],
@@ -227,6 +229,7 @@ fn quiet_day_writes_no_message() {
     let report = run_dream(
         &conn,
         &judge,
+        &MechanicalSermon,
         &spec("run-quiet", vec![], one_hot(0), &outbox, &log),
     );
 

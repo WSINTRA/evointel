@@ -1,12 +1,13 @@
 //! The Dreamer — Wunicorm's sleep.
 //!
 //! One run of the overnight pass, end to end: consume the queue, judge
-//! each note (the LLM seam — mocked with [`FixedJudge`] until the
-//! `OpenAPI` layer exists), write nodes and four-pillar edges idempotently
-//! with endpoint validation, observe the delta against a pre-dream
+//! each note (the extraction seam — [`Judge`], implemented live by the
+//! `llm` layer), write nodes and four-pillar edges idempotently with
+//! endpoint validation, observe the delta against a pre-dream
 //! snapshot, reflect (search → citations → drift → events), and speak
-//! the morning's message into the outbox. Every step is observed; the
-//! [`DreamReport`] is the run's truth.
+//! the morning's message into the outbox through the voice seam
+//! ([`SermonWriter`] — mechanical floor, LLM craft above it). Every
+//! step is observed; the [`DreamReport`] is the run's truth.
 //!
 //! The dreamer is the graph's *only writer*. It never delivers anything
 //! — the outbox artifact is the handoff to the (future) email /
@@ -69,6 +70,43 @@ pub trait Judge {
     fn judge(&self, conn: &Connection, note: &Note) -> Result<DreamJudgment, String>;
 }
 
+/// The sermon's voice: turns the reflection's grounded material —
+/// anchor, insights, citations — into the body the reader meets.
+///
+/// The facts are always the dreamer's own; the writer only speaks
+/// them. [`MechanicalSermon`] is the floor that cannot fail; the
+/// living voice is the LLM writer in `llm::LlmSermonWriter`. A writer
+/// that errors falls back to the floor, recorded, and the dream
+/// continues.
+pub trait SermonWriter {
+    fn compose(
+        &self,
+        anchor: &str,
+        insights: &[Insight],
+        citations: &[Citation],
+    ) -> Result<String, String>;
+}
+
+/// The guaranteed voice: mechanical, grounded, a log by design. It
+/// exists so the sermon always ships — craft is a layer above, not a
+/// dependency.
+pub struct MechanicalSermon;
+
+impl SermonWriter for MechanicalSermon {
+    fn compose(
+        &self,
+        anchor: &str,
+        insights: &[Insight],
+        _citations: &[Citation],
+    ) -> Result<String, String> {
+        let mut body = format!("Morning — a dream pass over your notes.\n\nAround '{anchor}':\n");
+        for i in insights {
+            let _ = writeln!(body, "- {}", i.summary);
+        }
+        Ok(body)
+    }
+}
+
 /// Deterministic judge for tests and demos: pre-baked judgments keyed
 /// by note id. Errors on notes it has no judgment for — the dreamer
 /// records that as a run error.
@@ -128,7 +166,12 @@ pub struct DreamSpec {
 /// Failures are *recorded*, not thrown: a dream that hits problems
 /// still produces a report, because the report is the observation the
 /// nightmare detector and the ledger act on.
-pub fn run_dream(conn: &Connection, judge: &dyn Judge, spec: &DreamSpec) -> DreamReport {
+pub fn run_dream(
+    conn: &Connection,
+    judge: &dyn Judge,
+    sermon: &dyn SermonWriter,
+    spec: &DreamSpec,
+) -> DreamReport {
     let started_at = Utc::now();
     let mut errors: Vec<String> = vec![];
     let mut nodes_written = 0usize;
@@ -182,7 +225,7 @@ pub fn run_dream(conn: &Connection, judge: &dyn Judge, spec: &DreamSpec) -> Drea
     let (message_written, shelf_ok) = if spec.queue.is_empty() {
         (false, true)
     } else {
-        reflect_and_speak(conn, spec, started_at, &mut errors)
+        reflect_and_speak(conn, sermon, spec, started_at, &mut errors)
     };
 
     let mut report = DreamReport {
@@ -351,11 +394,12 @@ fn node_exists(conn: &Connection, node: &NodeRef) -> Result<bool, String> {
 }
 
 /// The reflection stage: read the model the dream just updated, and
-/// write the sermon material into the outbox.
+/// write the sermon into the outbox.
 ///
 /// Returns `(message_written, shelf_ok)`.
 fn reflect_and_speak(
     conn: &Connection,
+    sermon: &dyn SermonWriter,
     spec: &DreamSpec,
     now: DateTime<Utc>,
     errors: &mut Vec<String>,
@@ -435,8 +479,23 @@ fn reflect_and_speak(
         }
     }
 
-    // Assemble, write, prove.
-    let body = render_body(&anchor_name, &insights, &citations);
+    // Assemble, write, prove. The prose is the writer's; the
+    // citations are always mechanical — grounding is never delegated.
+    let prose = match sermon.compose(&anchor_name, &insights, &citations) {
+        Ok(p) => p,
+        Err(e) => {
+            errors.push(format!(
+                "sermon writer failed, fell back to mechanical prose: {e}"
+            ));
+            MechanicalSermon
+                .compose(&anchor_name, &insights, &citations)
+                .unwrap_or_default()
+        }
+    };
+    let mut body = prose.trim_end().to_string();
+    if !citations.is_empty() {
+        let _ = write!(body, "\n\n{}", citations_block(&citations));
+    }
     let msg = Message {
         id: format!("msg-{}", spec.run_id),
         run_id: spec.run_id.clone(),
@@ -461,21 +520,14 @@ fn reflect_and_speak(
     }
 }
 
-/// Renders the sermon material: insights first, then the notes that
-/// ground them. Mechanical on purpose — prose craft belongs to a future
-/// renderer, not to the dreamer.
-fn render_body(anchor: &str, insights: &[Insight], citations: &[Citation]) -> String {
-    let mut body = format!("Morning — a dream pass over your notes.\n\nAround '{anchor}':\n");
-    for i in insights {
-        let _ = writeln!(body, "- {}", i.summary);
+/// The grounding block, rendered mechanically: every citation, always
+/// in the same shape, never the writer's job.
+fn citations_block(citations: &[Citation]) -> String {
+    let mut block = String::from("Grounded in your notes:\n");
+    for c in citations {
+        let _ = writeln!(block, "- [{}] {}", c.note_id, c.snippet);
     }
-    if !citations.is_empty() {
-        let _ = writeln!(body, "\nGrounded in your notes:");
-        for c in citations {
-            let _ = writeln!(body, "- [{}] {}", c.note_id, c.snippet);
-        }
-    }
-    body
+    block.trim_end().to_string()
 }
 
 /// First ~80 characters of a note — enough to recognize it, not enough
