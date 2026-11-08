@@ -26,7 +26,7 @@ use std::fmt;
 
 /// One of the four Jungian functions. The strings match the schema's
 /// `function_tag` values exactly — one source of truth for the spelling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Function {
     Thinking,
     Feeling,

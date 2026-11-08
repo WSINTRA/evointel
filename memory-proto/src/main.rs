@@ -9,7 +9,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use memory_proto::db::MemoryDb;
 use memory_proto::dreamer::{DreamSpec, TimeWindows, run_dream};
 use memory_proto::llm::{LlmClient, LlmConfig, LlmJudge, LlmSermonWriter, UreqClient};
-use memory_proto::nodes::Note;
+use memory_proto::nodes::{FunctionAnchor, Note};
 use memory_proto::schema::{self, EMBEDDING_DIM};
 use memory_proto::{extensions, vector};
 
@@ -77,6 +77,41 @@ fn main() {
         n.content_embedding = Some(emb);
     }
 
+    // The axes: embed the anchor corpus and seed it into the graph.
+    // The self layer is opt-in — this seeding is what wakes it, and the
+    // gate (`tests/anchor_eval.rs`, live) is what vouches for it.
+    let corpus = memory_proto::axes::corpus();
+    assert_eq!(corpus.len(), 40, "four poles of ten");
+    let corpus_texts: Vec<&str> = corpus.iter().map(|e| e.text.as_str()).collect();
+    let corpus_embeddings = client
+        .embed(&corpus_texts)
+        .expect("embed the anchor corpus");
+    let seeded_at = Utc::now();
+    let mut per_function: std::collections::BTreeMap<memory_proto::axes::Function, usize> =
+        std::collections::BTreeMap::new();
+    let anchors: Vec<FunctionAnchor> = corpus
+        .into_iter()
+        .zip(corpus_embeddings)
+        .map(|(e, embedding)| {
+            let n = per_function.entry(e.function).or_insert(0);
+            *n += 1;
+            FunctionAnchor {
+                id: format!("fa-{}-{n}", e.function.as_str()),
+                function: e.function.as_str().to_string(),
+                axis: e.function.axis().as_str().to_string(),
+                exemplar: e.text.clone(),
+                embedding: Some(embedding),
+                active: true,
+                created_at: seeded_at,
+                updated_at: seeded_at,
+                layer: 0,
+                context: "demo".to_string(),
+            }
+        })
+        .collect();
+    memory_proto::mutations::seed_function_anchors(&conn, &anchors)
+        .expect("seed the function anchors");
+
     // The dream: window A is November 2026 (the anxious cluster),
     // window B is February 2027 (the strategic one).
     let windows: TimeWindows = (
@@ -112,6 +147,43 @@ fn main() {
     println!("dreaming (three judgments and one sermon, ~1-2 min each)...");
     let report = run_dream(&conn, &judge, &sermon, &spec);
     println!("\n=== dream report ===\n{report:#?}");
+
+    // The self reading — the ledger's window. Numbers live here; the
+    // sermon only ever speaks them as movement.
+    if let Some(sp) = &report.self_pass {
+        println!("\n=== the self, after this dream ===");
+        match sp.user_position {
+            Some((j, p)) => println!(
+                "  you:        judgment {j:+.3}  perception {p:+.3}  (positive: thinking / sensing)"
+            ),
+            None => println!("  you:        unmeasurable this window"),
+        }
+        println!(
+            "  wunicorm:   core ({:+.3}, {:+.3})  comp ({:+.3}, {:+.3})  position ({:+.3}, {:+.3})",
+            sp.wunicorm_core.0,
+            sp.wunicorm_core.1,
+            sp.wunicorm_comp.0,
+            sp.wunicorm_comp.1,
+            sp.wunicorm_position.0,
+            sp.wunicorm_position.1,
+        );
+        println!(
+            "  rigidity:   judgment {:.2}  perception {:.2}  (compensation gated at 0.70)",
+            sp.rigidity.0, sp.rigidity.1,
+        );
+        match sp.drift {
+            Some((j, p)) => {
+                println!("  drift:      judgment {j:+.3}  perception {p:+.3}");
+            }
+            None => println!("  drift:      first window — nothing to compare yet"),
+        }
+        println!(
+            "  evidence:   {} kept, {} let go",
+            sp.evidence_kept, sp.evidence_dropped
+        );
+    } else {
+        println!("\nno self reading this run — anchors unseeded or a quiet day");
+    }
 
     if report.message_written {
         let sermon: serde_json::Value = serde_json::from_str(
