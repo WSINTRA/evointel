@@ -9,13 +9,13 @@ use super::fetch::get_note;
 /// Which node labels each edge type connects from and to.
 /// Mirrors the poly-rel DDL — needed because the lbug binder rejects
 /// `MATCH` patterns whose node labels don't fit the rel table.
-struct EdgeDef {
-    edge: &'static str,
-    from: &'static [&'static str],
-    to: &'static [&'static str],
+pub(crate) struct EdgeDef {
+    pub(crate) edge: &'static str,
+    pub(crate) from: &'static [&'static str],
+    pub(crate) to: &'static [&'static str],
 }
 
-const EDGES: &[EdgeDef] = &[
+pub(crate) const EDGES: &[EdgeDef] = &[
     EdgeDef {
         edge: "Contains",
         from: &["Memory", "Event", "Fact", "Note", "Time"],

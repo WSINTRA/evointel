@@ -10,7 +10,7 @@ use super::{chrono_to_time, chrono_to_time_opt};
 
 /// A typed reference to a graph node. The `label` is the Cypher table name
 /// (e.g. "Note", "Entity") used to build `MATCH (a:Label {id: $id})` clauses.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeRef {
     pub id: String,
     pub label: String,

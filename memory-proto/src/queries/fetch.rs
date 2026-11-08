@@ -5,12 +5,12 @@ use crate::db::DbResult;
 use crate::nodes::{Entity, Event, Fact, Memory, Note};
 
 /// Converts a lbug `time::OffsetDateTime` back to `chrono::DateTime<Utc>`.
-fn time_to_chrono(dt: &time::OffsetDateTime) -> DateTime<Utc> {
+pub(crate) fn time_to_chrono(dt: &time::OffsetDateTime) -> DateTime<Utc> {
     DateTime::from_timestamp(dt.unix_timestamp(), 0).expect("valid timestamp")
 }
 
 /// Extracts a property value from a `NodeVal`'s properties by key.
-fn get_prop<'a>(props: &'a [(String, Value)], key: &str) -> Option<&'a Value> {
+pub(crate) fn get_prop<'a>(props: &'a [(String, Value)], key: &str) -> Option<&'a Value> {
     props.iter().find(|(k, _)| k == key).map(|(_, v)| v)
 }
 
@@ -58,7 +58,7 @@ fn get_timestamp_opt(props: &[(String, Value)], key: &str) -> Option<DateTime<Ut
     }
 }
 
-fn get_embedding(props: &[(String, Value)], key: &str) -> Option<Vec<f32>> {
+pub(crate) fn get_embedding(props: &[(String, Value)], key: &str) -> Option<Vec<f32>> {
     match get_prop(props, key) {
         Some(Value::Array(_, elems)) => {
             let floats: Vec<f32> = elems
