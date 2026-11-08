@@ -1,11 +1,35 @@
-pub const EMBEDDING_DIM: usize = 518;
+//! Node-table DDL for the memory layer.
+//!
+//! The embedding column's width must match the live embedding model —
+//! currently EmbeddingGemma-2 on the local `llama.cpp` server, whose
+//! vectors are [`EMBEDDING_DIM`] wide. Because that width is a fact
+//! about the outside world, the DDLs here are templates rendered from
+//! the constant instead of static strings: one source of truth, no
+//! literal dims to drift out of sync.
 
-pub const CREATE_NODE_TABLE_ENTITY: &str = r"
+/// The width of every `FLOAT[dim]` embedding column — and the vector
+/// dimension the embedding endpoint must produce.
+pub const EMBEDDING_DIM: usize = 768;
+
+// Raw user input -- the ground truth. Everything else is derived from notes.
+const NOTE_T: &str = r"
+CREATE NODE TABLE Note(
+    id                STRING PRIMARY KEY,
+    content           STRING,
+    content_embedding FLOAT[{dim}],
+    created_at        TIMESTAMP,
+    updated_at        TIMESTAMP,
+    layer             INT16 DEFAULT 0,
+    context           STRING
+)
+";
+
+const ENTITY_T: &str = r"
 CREATE NODE TABLE Entity(
     id              STRING PRIMARY KEY,
     label           STRING,
     label_resolved  STRING,
-    label_embedding FLOAT[518],
+    label_embedding FLOAT[{dim}],
     learned_at      TIMESTAMP,
     expire_at       TIMESTAMP,
     created_at      TIMESTAMP,
@@ -14,7 +38,8 @@ CREATE NODE TABLE Entity(
     context         STRING
 )
 ";
-pub const CREATE_NODE_TABLE_TIME: &str = r"
+
+const TIME_T: &str = r"
 CREATE NODE TABLE Time(
     id              STRING PRIMARY KEY,
     granularity     STRING,
@@ -30,8 +55,9 @@ CREATE NODE TABLE Time(
     context         STRING
 )
 ";
+
 // Examples include, 'future', 'soon', 'never'. Let the agent anchor events to fuzzy temporal events
-pub const CREATE_NODE_TABLE_ABSTRACT_TIME: &str = r"
+const ABSTRACT_TIME_T: &str = r"
 CREATE NODE TABLE AbstractTime(
     id              STRING PRIMARY KEY,
     semantics       STRING,
@@ -45,9 +71,10 @@ CREATE NODE TABLE AbstractTime(
     context         STRING
 )
 ";
+
 //A fact like 'a dog belongs to the k9 family' would have predicate "belongs_to", certainty: 1.0,
 //source: 'general_knowledge'.
-pub const CREATE_NODE_TABLE_FACT: &str = r"
+const FACT_T: &str = r"
 CREATE NODE TABLE Fact(
     id              STRING PRIMARY KEY,
     predicate       STRING,
@@ -55,7 +82,7 @@ CREATE NODE TABLE Fact(
     source          STRING,
     label           STRING,
     label_resolved  STRING,
-    label_embedding FLOAT[518],
+    label_embedding FLOAT[{dim}],
     learned_at      TIMESTAMP,
     expire_at       TIMESTAMP,
     created_at      TIMESTAMP,
@@ -64,9 +91,10 @@ CREATE NODE TABLE Fact(
     context         STRING
 )
 ";
+
 // the status field captures, the state of event, 'occured', 'planned', 'cancelled', 'potential',
 // the is_going marks in progress
-pub const CREATE_NODE_TABLE_EVENT: &str = r"
+const EVENT_T: &str = r"
 CREATE NODE TABLE Event(
     id              STRING PRIMARY KEY,
     predicate       STRING,
@@ -76,7 +104,7 @@ CREATE NODE TABLE Event(
     is_ongoing      BOOLEAN DEFAULT FALSE,
     label           STRING,
     label_resolved  STRING,
-    label_embedding FLOAT[518],
+    label_embedding FLOAT[{dim}],
     learned_at      TIMESTAMP,
     expire_at       TIMESTAMP,
     created_at      TIMESTAMP,
@@ -85,13 +113,14 @@ CREATE NODE TABLE Event(
     context         STRING
 )
 ";
+
 //Memory - experiences worth keeping! - significance -- why this matters!..
 //emotions -- the emotional coloring ['excitement', 'vulnerable','determined', 'hope',
 //'practical','anxiety']...
 //reflection -- 'based on the Jungian and wunicorm evolving system of opposites, ie what value do I
 //get from this, what can I intuite from this, where am I thinking this will go, what do my
 //feelings tell me.
-pub const CREATE_NODE_TABLE_MEMORY: &str = r"
+const MEMORY_T: &str = r"
 CREATE NODE TABLE Memory(
     id              STRING PRIMARY KEY,
     predicate       STRING,
@@ -104,7 +133,7 @@ CREATE NODE TABLE Memory(
     reflection      STRING,
     label           STRING,
     label_resolved  STRING,
-    label_embedding FLOAT[518],
+    label_embedding FLOAT[{dim}],
     learned_at      TIMESTAMP,
     expire_at       TIMESTAMP,
     created_at      TIMESTAMP,
@@ -114,25 +143,20 @@ CREATE NODE TABLE Memory(
 )
 ";
 
-// Raw user input -- the ground truth. Everything else is derived from notes.
-pub const CREATE_NODE_TABLE_NOTE: &str = r"
-CREATE NODE TABLE Note(
-    id                STRING PRIMARY KEY,
-    content           STRING,
-    content_embedding FLOAT[518],
-    created_at        TIMESTAMP,
-    updated_at        TIMESTAMP,
-    layer             INT16 DEFAULT 0,
-    context           STRING
-)
-";
-
-pub const ALL_ENTITY_NODE_DDLS: &[&str] = &[
-    CREATE_NODE_TABLE_NOTE,
-    CREATE_NODE_TABLE_ENTITY,
-    CREATE_NODE_TABLE_TIME,
-    CREATE_NODE_TABLE_ABSTRACT_TIME,
-    CREATE_NODE_TABLE_FACT,
-    CREATE_NODE_TABLE_EVENT,
-    CREATE_NODE_TABLE_MEMORY,
-];
+/// The entity-table DDLs, rendered from [`EMBEDDING_DIM`]. Same
+/// declaration order as ever: Note, Entity, Time, `AbstractTime`,
+/// Fact, Event, Memory.
+pub fn entity_node_ddls() -> Vec<String> {
+    [
+        NOTE_T,
+        ENTITY_T,
+        TIME_T,
+        ABSTRACT_TIME_T,
+        FACT_T,
+        EVENT_T,
+        MEMORY_T,
+    ]
+    .iter()
+    .map(|t| t.replace("{dim}", &EMBEDDING_DIM.to_string()))
+    .collect()
+}

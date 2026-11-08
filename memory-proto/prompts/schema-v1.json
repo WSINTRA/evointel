@@ -1,0 +1,86 @@
+{
+  "type": "object",
+  "properties": {
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" }
+        },
+        "required": ["label"],
+        "additionalProperties": false
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "predicate": { "type": "string" },
+          "label": { "type": "string" }
+        },
+        "required": ["predicate", "label"],
+        "additionalProperties": false
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "predicate": { "type": "string" },
+          "status": { "type": "string" },
+          "label": { "type": "string" }
+        },
+        "required": ["predicate", "status", "label"],
+        "additionalProperties": false
+      }
+    },
+    "memories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "predicate": { "type": "string" },
+          "significance": { "type": "string" },
+          "emotions": { "type": "array", "items": { "type": "string" } },
+          "label": { "type": "string" }
+        },
+        "required": ["predicate", "significance", "emotions", "label"],
+        "additionalProperties": false
+      }
+    },
+    "times": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "iso": { "type": "string" }
+        },
+        "required": ["iso"],
+        "additionalProperties": false
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pillar": {
+            "type": "string",
+            "enum": ["contains", "similar", "has_property", "leads_to"]
+          },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "property_name": { "type": "string" },
+          "property_value": { "type": "string" }
+        },
+        "required": ["pillar", "from", "to"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["entities", "facts", "events", "memories", "times", "edges"],
+  "additionalProperties": false
+}

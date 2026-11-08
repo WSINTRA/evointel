@@ -2,6 +2,7 @@ pub mod db;
 pub mod dreamer;
 pub mod edges;
 pub mod extensions;
+pub mod llm;
 pub mod message;
 pub mod mutations;
 pub mod nodes;
