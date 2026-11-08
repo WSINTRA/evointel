@@ -1,15 +1,21 @@
 pub mod axes;
+pub mod config;
+pub mod daemon;
 pub mod db;
 pub mod dreamer;
 pub mod edges;
 pub mod extensions;
+pub mod ingest;
 pub mod llm;
 pub mod message;
 pub mod mutations;
 pub mod nodes;
 pub mod observability;
+pub mod output;
 pub mod queries;
 pub mod schema;
+pub mod scheduler;
+pub mod tray;
 pub mod vector;
 
 pub use db::MemoryDb;

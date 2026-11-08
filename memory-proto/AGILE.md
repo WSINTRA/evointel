@@ -1,505 +1,489 @@
-# Memory-Proto — Work Breakdown
+# Wunicorm v1 — Work Breakdown
 
 ## Where we are
 
-The prototype build-out — Tasks 1-19 (schema, mutations, queries, vector search,
-drift reads, snapshot/similarity, message + observability, the dreamer, the LLM
-layer, the live judge, the sermon's living voice) — is **complete**. Its record
-lives in git history: the previous version of this file and the commit sequence
-through `chore: updated docs`. This list replaces it.
+The prototype build-out (schema, mutations, queries, vector search, drift,
+snapshot, the dreamer, the LLM layer, the function space, self pass, sermon
+voice, full eval) is **complete**. Its record lives in git history. The memory
+layer is proven: LadybugDB, the four pillars, the Jungian function space, the
+two-point model, the dream cycle.
 
-**Tasks 20-32 (the function space) are complete** — axes, gate, self tables,
-psyche reads, extractor seam, choice ledger, self pass, sermon voice, full
-eval, demo, and the paper trail (D-002). The concept's full record:
-`PAPER_TRAIL.md` D-002 and `plan.md` §6.
+**v1 goal:** a working daemon. The memory layer is the engine; v1 adds the
+ingress (Mac Notes via osascript), the scheduler (when to dream), the tray
+(menu-bar icon), and the output (notifications + Notes writer). No web app.
+Mac Notes is the input surface.
 
-## What this list is: the Function Space
+## What this list is: the daemon shell
 
-The Jungian functions move out of the prompts and into the graph itself:
+Three new layers wrap around the proven memory core:
 
-- **Two bipolar axes** — judgment (thinking ↔ feeling) and perception
-  (sensing ↔ intuiting) — built from contrastive anchor pairs seeded into the
-  graph. Every `Note` projects to a signed 2-dim coordinate; every dream's
-  choices project Wunicorm into the same frame.
-- **Two points, one frame.** **U** (the user's psyche) is the windowed centroid
-  of note coordinates. **W** (Wunicorm's voice) is the position implied by its
-  *choices* — what it kept, dropped, and emphasized, tagged by function. W is a
-  damped core (hysteresis: personality, not mood) plus a fast compensation
-  component gated by U's **rigidity** (straightness of trajectory, not
-  direction).
-- **The self pass** — a new deterministic stage in the dream cycle ("working
-  the self") between writing judgments and reflection. The sermon speaks from
-  it in movement language, from day one.
-- **Schema evolution** — all of it lands through a versioned migration layer.
-  lbug 0.22.1 natively supports `IF NOT EXISTS`, `ALTER TABLE`, and
-  transactions; the prototype used none of them.
+```
+[ Mac Notes app ]
+       |
+       |  osascript (on schedule)
+       v
+[ INGRESS ]      -- pulls notes, detects changes, builds queue
+       |
+       v
+[ SCHEDULER ]    -- tick every 30s, is it dream time?
+       |
+       v
+[ MEMORY ]       -- existing dreamer + judge + graph (unchanged)
+       |
+       v
+[ OUTPUT ]       -- macOS notification + write to "Wunicorm" Notes folder
 
-The guards, one line each: rigidity-not-direction · damped prescription · the
-auditor is audited · no claimed effects · the discarded is data · no revision
-without observation. The full concept is recorded in `PAPER_TRAIL.md` (D-002)
-and `plan.md` with Task 32.
+[ TRAY ]         -- menu-bar icon on main thread, shows state
+```
+
+Single process. Main thread = tray (Cocoa event loop). Worker thread = daemon
+loop. State shared via `Arc<AtomicU8>`.
 
 ## Design principles
 
-- **High cohesion**: each module does one thing. `nodes.rs`/`edges.rs` = data.
-  `mutations/` = write path. `queries/` = read path. `vector.rs` = search.
-  `axes.rs` = function-space math. `queries/psyche.rs` = position/rigidity reads.
-- **Low coupling**: mutations and queries depend on types + `db.rs`, not on
-  each other.
-- **Hidden complexity**: the caller never sees Cypher, never knows edges are
-  nodes, never converts `time` ↔ `chrono`.
-- **Derived, never authoritative**: coordinates and positions are derived from
-  notes + recorded choices. Every positional claim traces to nodes via
-  `Grounds` edges.
-- **Failures are recorded, not thrown**: the dreamer's contract extends to the
-  self pass — a missing anchor or unmeasurable window degrades the dream,
-  never kills it.
+- **Memory layer is untouched.** Every existing module (axes, db, dreamer,
+  edges, llm, nodes, queries, schema, vector, message, mutations,
+  observability, extensions) stays exactly as-is. The daemon is a new consumer.
+- **One process, one binary.** No Swift, no IPC, no separate apps. `tray-icon`
+  on the main thread, the dream loop on a worker thread.
+- **osascript is the Notes bridge.** Read notes, write notes, send
+  notifications — all through `std::process::Command` invoking `osascript`.
+- **Config is a TOML file.** `~/.config/memory-proto/config.toml`. Created
+  with defaults on first run. LLM URLs still overridable by env vars.
+- **State is a small JSON file.** `~/.local/share/memory-proto/state.json`
+  holds `last_seen` (note ID → modification date) and `last_dream_date`.
+- **The tray is the only UI.** Menu-bar icon with three states: idle,
+  dreaming, notification. Menu: status, open folder, quit.
+- **Failures are recorded, not fatal.** The daemon loop catches errors, logs
+  them, and continues. The daemon never dies for one bad night.
 
-## Key lbug API notes
+## Key decisions
 
-- `Connection::query(&str)` — Cypher; returns `QueryResult` (iterator of
-  `Vec<Value>`)
-- `Connection::prepare(&str)` + `execute(&mut stmt, Vec<(&str, Value)>)` —
-  parameterized `$name` queries
-- `Value` enum: `String`, `Double`, `Float`, `Timestamp(time::OffsetDateTime)`,
-  `Array(LogicalType, Vec<Value>)`, `Bool`, `Null(LogicalType)`, `Node(NodeVal)`
-- **Timestamps**: lbug uses `time::OffsetDateTime`; structs keep `chrono`;
-  private conversion helpers do the swap
-- **Embeddings**: `Value::Array(LogicalType::Float, ...)` for `FLOAT[768]`
-  columns — width is `EMBEDDING_DIM` (entity_nodes.rs), the single source of
-  truth
-- **DDL (verified in lbug 0.22.1 source; unused until Task 20):**
-  `CREATE NODE|REL TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD|DROP|RENAME
-  [IF [NOT] EXISTS]` (one column per statement), rel-table connection
-  extension, `BEGIN TRANSACTION` / `COMMIT`. **No `SHOW TABLES`** — existence
-  is probed by query-and-error.
-- **Test runs must be serial**: `cargo tst` (alias for
-  `test -- --test-threads=1`) — lbug maps a ~8 TiB virtual region per open DB
+| Decision | Choice | Rationale |
+|---|---|---|
+| Dream time default | 22:00, configurable | Overnight pass |
+| Folders to watch | All except "Wunicorm" and "Recently Deleted" | Auto-discover; user doesn't configure |
+| Tray icon | Generated monochrome PNG | Placeholder until a real glyph |
+| Directory name | `memory-proto/` (unchanged) | Don't touch git history paths |
+| Package name | `memory-proto` (unchanged) | Same reason |
+| Note identity | Core Data URI (`id of note`) | Stable across renames |
+| Change detection | Modification date comparison | Cheap; no content hashing |
+| Note body | HTML → strip to text | LLM wants text, not markup |
+| DB location | `~/.local/share/memory-proto/memory.db` | XDG standard |
+| Threading | Main = tray; worker = daemon | `tray-icon` needs main thread on macOS |
+| Shutdown | SIGINT/SIGTERM or tray "Quit" → daemon thread exits | Graceful |
 
 ---
 
 ## Tasks
 
-### Task 20: Schema evolution — versioned migrations, IF NOT EXISTS retrofit
+### Task 1: Restructure — move demo to examples, stub main.rs
 
-**What:** The DB can be updated in place. A version marker plus ordered
-idempotent DDL batches replace the create-only `init()`, and every existing
-DDL gains `IF NOT EXISTS`.
+**What:** Clear the main.rs slot for the daemon. The existing demo (§8 story)
+becomes an example binary.
 
 **Details:**
-- `src/schema/meta.rs` — `SchemaMeta(id STRING PRIMARY KEY, version INT64,
-  applied_at TIMESTAMP)`, created `IF NOT EXISTS`. `schema_version(conn)` reads
-  the `schema` row; binder error (table missing) or empty result → 0.
-- `src/schema/migrations.rs` — `batches() -> Vec<(i64, Vec<String>)>`: v1 is
-  the complete current schema (entity tables, edge-node tables, relation node
-  tables, poly-rels, time-tree MERGE seeds — MERGE is already idempotent) with
-  `IF NOT EXISTS` added to every CREATE.
-- `schema::init(conn)` becomes: ensure `SchemaMeta` → read version → apply each
-  pending batch → write the new version. Every DDL is idempotent, so a
-  partially-applied batch converges on re-run; the marker moves only after a
-  full batch succeeds. Wrap a batch in `BEGIN TRANSACTION`/`COMMIT` only if
-  lbug proves DDL-safe inside a transaction — verify empirically here; if not,
-  idempotence is the safety.
-- `src/main.rs` — drop the `is_new` file-existence gate; always init (now
-  migrate). Re-running the demo against an old `dream.db` upgrades it.
-- `init_vector_indexes` already tolerates "already exists" — unchanged.
+- Move `src/main.rs` → `examples/demo.rs` (unchanged, still runs the §8 story)
+- New `src/main.rs`: prints a version banner and exits. No daemon yet.
+- `cargo build` + `cargo test` green.
 
-**Files:** `src/schema/meta.rs` (new), `src/schema/migrations.rs` (new),
-`src/schema/mod.rs`, `src/schema/entity_nodes.rs`, `src/schema/edge_nodes.rs`,
-`src/schema/relations.rs`, `src/schema/poly_relations.rs`, `src/main.rs`
+**Files:** `src/main.rs`, `examples/demo.rs`
 
-**Tests (`tests/migrations.rs`):** fresh init reaches the latest version;
-re-init is a no-op; a hand-built partial schema (some tables, no marker)
-converges; the marker is written once. Task 23 extends this file: a v1 DB with
-data migrates to v2 with data intact.
+**Commit:** `refactor: move demo to examples, stub daemon main`
 
 **Depends on:** nothing
 
 ---
 
-### Task 21: The axes — anchor corpus + projection math
+### Task 2: Config layer
 
-**What:** `prompts/anchors-v1.md` — the frozen exemplar corpus — and
-`src/axes.rs` — pole centroids and signed coordinates. Pure math, no DB.
+**What:** A `Config` struct read from `~/.config/memory-proto/config.toml`.
+Creates the file with defaults on first run.
 
 **Details:**
-- The corpus: ~10 first-person exemplar texts per pole (thinking, feeling,
-  sensing, intuiting). LLM-drafted, human-reviewed, frozen. Apprehension
-  *register*, not description: a thinking-pole text *does* thinking, it never
-  says "this is thinking."
-- `src/axes.rs`:
-  - `Function` enum (Thinking, Feeling, Sensing, Intuiting) with
-    `axis() -> Judgment | Perception`
-  - `AxisFrame { t_pole, f_pole, s_pole, n_pole }` — pole centroids: the mean
-    of a pole's exemplar embeddings, L2-normalized. `AxisFrame::from_exemplars`
-    builds it; `coordinates(embedding) -> (judgment, perception)` computes
-    `cos(x, own_pole) − cos(x, opposite_pole)` per axis. A local `cosine`
-    helper (drift.rs's is private; no cross-module coupling).
-  - The constants block is born here and grows with Task 25 — one documented
-    place, every value logged per run.
+- `src/config.rs`: `Config` struct + `Config::load() -> Result<Self>`.
+- Fields:
+  - `dream_time: String` — default `"22:00"`, parsed to `(u8, u8)` (hour, min)
+  - `db_path: String` — default `~/.local/share/memory-proto/memory.db`
+  - `state_path: String` — default `~/.local/share/memory-proto/state.json`
+  - `excluded_folders: Vec<String>` — default `["Wunicorm", "Recently Deleted"]`
+  - `[llm]` block: `chat_base_url`, `chat_model`, `embed_base_url`,
+    `embed_model` — all optional, env vars override
+- `Config::load()` creates parent dirs, writes defaults if the file is missing.
+- Env var overrides: `WUNICORM_CHAT_URL`, `WUNICORM_CHAT_MODEL`,
+  `WUNICORM_EMBED_URL`, `WUNICORM_EMBED_MODEL` (existing `LlmConfig::from_env`
+  already does this).
 
-**Files:** `prompts/anchors-v1.md` (new), `src/axes.rs` (new), `src/lib.rs`
+**Files:** `src/config.rs` (new), `src/lib.rs`
 
-**Tests:** unit tests with synthetic vectors — known geometry → known
-coordinates; orthogonal exemplars → clean axes; empty exemplar set →
-`AxisFrame` is `None` (the graceful degradation case).
+**Tests:** default creation, parse valid TOML, env override.
 
-**Depends on:** nothing (runs parallel to Task 20)
+**Commit:** `feat: add config layer (TOML, defaults, env overrides)`
+
+**Depends on:** Task 1
 
 ---
 
-### Task 22: The anchor separability gate
+### Task 3: Notes Ingress — osascript bridge
 
-**What:** `tests/anchor_eval.rs` — the go/no-go experiment for pure geometry.
+**What:** Read all notes from Mac Notes via osascript, detect which are new
+or changed, return a queue ready for the dreamer.
 
 **Details:**
-- Live-gated (`WUNICORM_LLM_LIVE=1`, the `llm_live.rs` pattern): embed every
-  exemplar from `prompts/anchors-v1.md` via the real server; compute
-  (a) opposite-pole centroid cosine (T̂·F̂, Ŝ·N̂), (b) cross-axis centroid
-  cosines, (c) within-pole coherence, (d) leave-one-out discriminability — per
-  exemplar, does the sign of its coordinate on the owning axis place it in its
-  own pole?
-- **Pass (proposed; tune after the first real numbers):** opposite-pole cosine
-  ≤ 0.75 on both axes and leave-one-out ≥ 8/10 per pole. Fail → the fallback
-  (a learned probe over embeddings) is recorded in PAPER_TRAIL and the design
-  is revisited before Task 25.
-- Hermetic variant (always runs): synthetic exemplar embeddings with known
-  geometry assert the *metric code* is correct; the live variant asserts the
-  *world* is right.
-- The numbers, whatever they are, land in D-002's Context (Task 32).
+- `src/ingest.rs`:
+  - `RawNote { id: String, name: String, modified: DateTime<Utc>, body_html: String }`
+  - `pull_notes(folders: &[String]) -> Result<Vec<RawNote>>`:
+    Builds and runs one AppleScript that iterates all folders except the
+    excluded list, for each note emits tab-delimited:
+    `<id>\t<name>\t<modification_date>\t<body_html>`
+    Parses stdout into `Vec<RawNote>`.
+  - `html_to_text(html: &str) -> String`: strip tags (regex `<[^>]+>`),
+    unescape `&amp; &lt; &gt; &quot; &#39; &nbsp;`.
+  - `detect_changes(raw: &[RawNote], last_seen: &BTreeMap<String, DateTime<Utc>>) -> Vec<Note>`:
+    New notes (id not in map) + changed notes (modified > stored) → `Vec<Note>`.
+    Note.id = Core Data URI. Note.content = stripped text.
+  - `update_last_seen(map, raw)` — update the map after a successful dream.
+- `last_seen` is a `BTreeMap<String, DateTime<Utc>>` persisted as JSON in the
+  state file (Task 4 owns the file).
 
-**Files:** `tests/anchor_eval.rs` (new), `src/axes.rs` (metrics helpers)
-
-**Tests:** the eval is the test.
-
-**Depends on:** Task 21. **Gate:** go/no-go for pure geometry.
-
----
-
-### Task 23: Migration v2 — the self tables + coordinate columns
-
-**What:** Batch v2: `FunctionAnchor`, `SelfState`, `DreamRun` node tables;
-derived-coordinate columns on `Note`; function/provenance columns on `Memory`.
-Typed structs + insert mutations.
-
-**Details (DDL sketch):**
-
-```sql
-CREATE NODE TABLE IF NOT EXISTS FunctionAnchor(
-    id STRING PRIMARY KEY, function STRING, axis STRING, exemplar STRING,
-    embedding FLOAT[768], active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP, updated_at TIMESTAMP, layer INT16 DEFAULT 0, context STRING)
-CREATE NODE TABLE IF NOT EXISTS SelfState(
-    id STRING PRIMARY KEY, subject STRING, window_start TIMESTAMP, window_end TIMESTAMP,
-    judgment_coord DOUBLE, perception_coord DOUBLE,
-    judgment_core DOUBLE, perception_core DOUBLE,
-    judgment_comp DOUBLE, perception_comp DOUBLE,
-    rigidity_judgment DOUBLE, rigidity_perception DOUBLE,
-    evidence_kept INT64, evidence_dropped INT64,
-    learned_at TIMESTAMP, created_at TIMESTAMP, updated_at TIMESTAMP,
-    layer INT16 DEFAULT 4, context STRING)
-CREATE NODE TABLE IF NOT EXISTS DreamRun(
-    id STRING PRIMARY KEY, considered STRING[], dropped STRING[],
-    kept_t INT64, kept_f INT64, kept_s INT64, kept_n INT64, dropped_total INT64,
-    started_at TIMESTAMP, finished_at TIMESTAMP,
-    created_at TIMESTAMP, updated_at TIMESTAMP, layer INT16 DEFAULT 3, context STRING)
-ALTER TABLE Note ADD IF NOT EXISTS judgment_coord DOUBLE
-ALTER TABLE Note ADD IF NOT EXISTS perception_coord DOUBLE
-ALTER TABLE Memory ADD IF NOT EXISTS function_tag STRING
-ALTER TABLE Memory ADD IF NOT EXISTS run_id STRING
+**AppleScript:**
+```applescript
+tell application "Notes"
+    set output to ""
+    repeat with f in (every folder whose name is not "Wunicorm" and name is not "Recently Deleted")
+        set theNotes to notes of f
+        repeat with i from 1 to (count of theNotes)
+            set n to item i of theNotes
+            set output to output & (id of n) & tab & (name of n) & tab & (modification date of n) & tab & (body of n) & linefeed
+        end repeat
+    end repeat
+    return output
+end tell
 ```
 
-- New DDL consts live in `src/schema/self_nodes.rs` (not stuffed into
-  entity_nodes); the batch joins `migrations.rs` as v2.
-- Structs in `nodes.rs` mirror the DDL 1:1 (house rule). `SelfState.subject` ∈
-  {`user`, `wunicorm`}; `Memory.function_tag` ∈ the four function names —
-  enum-as-string, validated at the struct layer.
-- `src/mutations/self_ops.rs`: `insert_self_state`, `insert_dream_run`,
-  `seed_function_anchors` (deactivates old rows first — anchor history is
-  preserved; the auditor is audited).
-- Extend `tests/migrations.rs`: a v1 DB with data → v2; ALTERed columns exist
-  (probed via `RETURN n.col` — binder error if absent); old rows readable with
-  NULL coords/tags.
+**Files:** `src/ingest.rs` (new), `src/lib.rs`, `Cargo.toml` (add `regex`)
 
-**Files:** `src/schema/self_nodes.rs` (new), `src/schema/migrations.rs`,
-`src/nodes.rs`, `src/mutations/self_ops.rs` (new), `src/mutations/mod.rs`,
-`src/lib.rs`
+**Tests:** fixture output parsing, HTML stripping, change detection
+(new/changed/unchanged), tab-in-body handling.
 
-**Tests:** v1→v2 migration with data intact; roundtrip + idempotency per
-insert; anchor re-seed deactivates old rows.
+**Commit:** `feat: add notes ingress (osascript bridge, change detection)`
 
-**Depends on:** Tasks 20, 21
+**Depends on:** Task 1
 
 ---
 
-### Task 24: Grounds edges + self trajectory
+### Task 4: State persistence + Scheduler
 
-**What:** The provenance edge (`Grounds`: SelfState → Note/Memory) and the
-trajectory rel (`SELF_TRAJECTORY`: SelfState → SelfState).
+**What:** A small JSON state file that tracks what the daemon has seen and
+when it last dreamed. Plus the scheduler that decides "is it dream time?"
 
 **Details:**
-- `Grounds` goes through the full 7-touchpoint checklist (house pattern):
-  `edge_nodes.rs` DDL const, `poly_relations.rs` FROM/TO pair, `edges.rs`
-  struct + `EdgeType::Grounds` + `ALL`, `traversal.rs` `EDGES` entry,
-  `edge_links.rs` `link_grounds`, `mutations/mod.rs` re-export. `snapshot.rs`
-  picks it up automatically via `EdgeType::ALL`.
-- `SELF_TRAJECTORY` is a plain rel — `CREATE REL TABLE IF NOT EXISTS
-  SELF_TRAJECTORY(FROM SelfState TO SelfState)` — the `TIME_HIERARCHY`
-  precedent; `wire_self_trajectory(prev, next)` MERGE mutation in `self_ops.rs`.
+- `src/scheduler.rs`:
+  - `DaemonState { last_seen: BTreeMap<String, DateTime<Utc>>, last_dream_date: Option<NaiveDate> }`
+  - `DaemonState::load(path) -> Self` — read or default.
+  - `DaemonState::save(path)` — write JSON atomically (temp + rename).
+  - `Scheduler { dream_hour: u8, dream_minute: u8 }`
+  - `Scheduler::from_config(config) -> Self`
+  - `is_dream_time(&self, now: DateTime<Local>, last_dream_date: Option<NaiveDate>) -> bool`
+    — true when `now.hour() >= dream_hour && now.minute() >= dream_minute`
+    AND `last_dream_date != Some(today)`.
 
-**Files:** `src/schema/edge_nodes.rs`, `src/schema/poly_relations.rs`,
-`src/schema/self_nodes.rs` (the rel), `src/edges.rs`, `src/nodes.rs` (structs),
-`src/queries/traversal.rs`, `src/mutations/edge_links.rs`,
-`src/mutations/self_ops.rs`
+**Files:** `src/scheduler.rs` (new), `src/lib.rs`
 
-**Tests:** Grounds edge-node + both rels + idempotent; dangling-ref fence
-applies; trajectory wiring; both visible to `graph_snapshot`.
+**Tests:** scheduler fires at the right time, once-per-day guard, state
+save/load roundtrip, missing file → defaults.
 
-**Depends on:** Task 23
+**Commit:** `feat: add scheduler and state persistence`
+
+**Depends on:** Tasks 1, 2, 3
 
 ---
 
-### Task 25: Psyche reads — positions, rigidity, function drift
+### Task 5: Output — notifications + Notes writer
 
-**What:** `src/queries/psyche.rs` — U and W positions, the straightness index,
-the 2-dim drift mirror, and the W decomposition math.
+**What:** Send a macOS notification and write a note back into Mac Notes.
 
 **Details:**
-- `user_position(conn, window)` — centroid of Note coordinates in the window;
-  unmeasurable → `None` (drift's "can't tell" stance).
-- `wunicorm_observed(conn, run_id)` — from DreamRun counts:
-  `judgment = (kept_t − kept_f) / (kept_t + kept_f + δ·dropped_total)`,
-  perception likewise. Drops *dilute* (shrink toward zero), never push.
-- `rigidity(conn, subject, axis, span)` — the straightness index: net
-  displacement ÷ path length over the trailing SelfStates; 0 when unmeasurable.
-- `function_drift(conn, subject, from, to)` — per-axis displacement between two
-  window positions; the 2-dim mirror of `queries/drift.rs`.
-- The W decomposition as pure functions, wired into the dream in Task 28:
-  `core ← α·core + (1−α)·observed`; `comp = −k_eff · U_position` per axis;
-  `k_eff = k_base · max(0, rigidity − θ)`; `position = core + comp`, comp
-  clamped.
-- Constants, one documented block: α (core damping) 0.9, k_base 0.25, θ
-  (rigidity threshold) 0.7, δ (drop dilution) 0.5. All logged per run; all
-  subject to no-revision-without-observation.
+- `src/output.rs`:
+  - `notify(title: &str, body: &str) -> Result<()>` — `osascript -e
+    'display notification "..." with title "..."'`. Escape double quotes.
+  - `ensure_notes_folder(name: &str) -> Result<()>` — create if missing.
+  - `write_note(title: &str, html_body: &str, folder: &str) -> Result<()>` —
+    `make new note at folder ... with properties {name:..., body:...}`.
+  - `sermon_to_html(text: &str) -> String` — wrap paragraphs in `<div>`.
+- All output functions take a `dry_run: bool` flag — when true, log the
+  command instead of executing (for CI/tests).
 
-**Files:** `src/queries/psyche.rs` (new), `src/queries/mod.rs`, `src/axes.rs`
-(constants)
+**Files:** `src/output.rs` (new), `src/lib.rs`
 
-**Tests:** synthetic fixtures — known coordinates → known centroids; straight
-vs zigzag trajectories → rigidity ~1 vs ~0; drops dilute (1 keep + 9 drops
-lands near zero, not at the keep's pole); decomposition — rigid one-sided U →
-nonzero comp toward balance, balanced U → comp 0, non-rigid one-sided U →
-comp 0.
+**Tests:** escaping (quotes in title/body), dry-run produces correct command
+strings.
 
-**Depends on:** Tasks 21, 23
+**Commit:** `feat: add output layer (macOS notifications, Notes writer)`
+
+**Depends on:** Task 1
 
 ---
 
-### Task 26: The extraction seam — memories carry their function
+### Task 6: Tray icon
 
-**What:** The extractor names the four functions; every kept memory arrives
-tagged.
+**What:** The menu-bar icon. Three visual states. A simple menu.
 
 **Details:**
-- `prompts/extract-v1.md`: the reflection question becomes the four functions —
-  what to make of it through the lens it actually engages: thinking (where
-  this leads), feeling (what it's worth), sensing (what concretely happened),
-  intuiting (what pattern it hints at). Each memory carries `function`: the
-  dominant lens, required, one of the four.
-- `prompts/schema-v1.json`: memories items gain
-  `"function": { "enum": ["thinking","feeling","sensing","intuiting"] }` —
-  required; `additionalProperties` stays false.
-- `src/llm/judge.rs`: `RawMemory` gains `function`; the mapping writes it
-  through to `Memory` → `function_tag`.
+- Generate three 22x22 monochrome PNGs (a small horn/spiral glyph):
+  - `assets/tray-idle.png` — normal
+  - `assets/tray-dreaming.png` — with a filled dot indicator
+  - `assets/tray-notify.png` — with a badge dot
+- `src/tray.rs`:
+  - `TrayState` enum: Idle, Dreaming, Notification
+  - `run_tray(state: Arc<AtomicU8>) -> !` — runs on the main thread.
+    Creates the `tray-icon`, menu items, enters the event loop.
+    Polls the atomic state every ~1s, swaps the icon on change.
+  - Menu items:
+    - "Wunicorm — Running" (disabled)
+    - "Open Wunicorm Folder" (osascript to open Notes folder)
+    - Separator
+    - "Quit" (sets a shutdown flag, exits the process)
+- `IconState` constants: `IDLE = 0`, `DREAMING = 1`, `NOTIFY = 2`.
 
-**Files:** `prompts/extract-v1.md`, `prompts/schema-v1.json`,
-`src/llm/judge.rs`, `src/nodes.rs` (field), `src/mutations/content.rs`
+**Files:** `src/tray.rs` (new), `src/lib.rs`, `assets/tray-*.png` (new),
+`Cargo.toml` (add `tray-icon`)
 
-**Tests:** hermetic `llm_judge.rs` extension — canned judgments with tags →
-`Memory.function_tag` set; a judgment with an unknown tag fails validation at
-the mapping step and is recorded (house pattern).
+**Tests:** none (UI; manual verification in Task 9).
 
-**Depends on:** Task 23 (the column exists)
+**Commit:** `feat: add tray icon with state indicator`
+
+**Depends on:** Task 1
 
 ---
 
-### Task 27: The dreamer's choice ledger
+### Task 7: Daemon loop
 
-**What:** `run_dream` records what it was offered versus what it kept — per
-function.
+**What:** The worker thread. The main loop: sleep, check time, dream, output.
 
 **Details:**
-- The judge/write loop tracks: considered note ids, per-function kept counts,
-  and dropped note ids (judged, nothing kept).
-- One idempotent `insert_dream_run` per run (id = run_id) — re-runs converge.
-- `DreamReport` is untouched here; the self pass owns its report fields
-  (Task 28).
+- `src/daemon.rs`:
+  - `run_daemon(config: Config, state: Arc<AtomicU8>, shutdown: Arc<AtomicBool>)`
+  - Loop:
+    1. Set tray state to Idle.
+    2. Sleep 30 seconds (check shutdown flag every 1s).
+    3. Load `DaemonState` from disk.
+    4. `if scheduler.is_dream_time(now, state.last_dream_date)`:
+       a. Set tray state to Dreaming.
+       b. `ingest::pull_notes(&config.excluded_folders)`
+       c. `ingest::detect_changes(&raw, &state.last_seen)` → queue
+       d. If queue is non-empty:
+          - Embed note contents via the LLM client.
+          - Build `DreamSpec` (run_id = timestamp, drift_windows from config,
+            outbox = data dir / "outbox", dream_log = data dir / "dream-log.jsonl")
+          - `run_dream(&conn, &judge, &sermon, &spec)`
+          - If `report.message_written`: read the sermon from the outbox,
+            `output::notify("Sermon ready", ...)`,
+            `output::write_note(...)` to the "Wunicorm" folder,
+            set tray state to Notification.
+       e. `state.update_last_seen(&raw)`, `state.last_dream_date = Some(today)`,
+          `state.save(...)`.
+       f. Set tray state to Idle (or Notification if a message was written).
+    5. Catch all errors, log to stderr, continue the loop.
+  - The DB connection is opened once at the start and held for the daemon's
+    lifetime.
 
-**Files:** `src/dreamer.rs`, `src/mutations/self_ops.rs`
+**Files:** `src/daemon.rs` (new), `src/lib.rs`
 
-**Tests:** `tests/dreamer.rs` with `FixedJudge` — DreamRun written with
-correct counts; judged-but-nothing-kept lands in `dropped`; re-dream with the
-same run_id → counts stable.
+**Tests:** none (integration; manual verification in Task 9).
 
-**Depends on:** Tasks 23, 26
+**Commit:** `feat: add daemon loop (sleep, check, dream, output)`
+
+**Depends on:** Tasks 2, 3, 4, 5
 
 ---
 
-### Task 28: The self pass — `work_the_self` in the dream
+### Task 8: Wire in main.rs
 
-**What:** The seam: a deterministic stage in `run_dream` between the
-judge/write loop and observe/reflect. The dream works the self.
+**What:** The real entry point. Loads config, opens DB, seeds anchors, starts
+tray and daemon, handles shutdown.
 
 **Details:**
-- Inputs: this run's choice tallies, the notes, the active `AxisFrame`. Steps,
-  all record-don't-throw:
-  1. Batch-SET `judgment_coord`/`perception_coord` on the run's notes.
-  2. U: window position → `SelfState(subject=user)` +
-     `wire_self_trajectory` from the previous user state + `link_grounds` to
-     the window's notes.
-  3. W: observed position → core update → rigidity-gated compensation →
-     `SelfState(subject=wunicorm)` + trajectory + grounds to the run's kept
-     memories.
-  4. Assemble `SelfReading` — per-axis from→to movement, W's lean, tension
-     (axis oscillation) — movement language; numbers stay in the report.
-- Unseeded anchors or unmeasurable windows → recorded error,
-  `self_pass: None`, the dream continues (it never dies for the self's sake).
-- `DreamReport` gains `self_pass: Option<SelfPassReport>` (positions,
-  rigidities, k_eff, evidence counts) — the auditor, observed. `is_nightmare`
-  unchanged.
+- `src/main.rs`:
+  1. `Config::load()`
+  2. `MemoryDb::open(&config.db_path, EMBEDDING_DIM)`
+  3. `schema::init(&conn)` (migrates in place)
+  4. `vector::init_vector_indexes(&conn)`
+  5. Seed function anchors (idempotent — check if already seeded)
+  6. Create `Arc<AtomicU8>` (tray state) and `Arc<AtomicBool>` (shutdown)
+  7. Spawn daemon thread with config + state + db + shutdown flag
+  8. Call `tray::run_tray(state, shutdown)` on the main thread (blocks)
+  9. On tray exit: set shutdown, join daemon thread
+- Signal handling: `ctrlc` crate or `signal-hook` to set the shutdown flag
+  on SIGINT/SIGTERM.
 
-**Files:** `src/dreamer.rs`, `src/observability.rs`, `src/queries/psyche.rs`,
-`src/mutations/self_ops.rs`
+**Files:** `src/main.rs`, `Cargo.toml` (add `ctrlc` or `signal-hook`)
 
-**Tests:** `tests/dreamer.rs` extension — both SelfStates written; trajectory
-on the second run; comp = 0 for balanced U and for non-rigid one-sided U;
-comp ≠ 0 for rigid one-sided U; anchors missing → `None` + recorded error;
-`DreamReport` carries the report.
+**Tests:** `cargo build` green.
 
-**Depends on:** Tasks 24, 25, 27
+**Commit:** `feat: wire daemon entry point (config, db, tray, worker)`
+
+**Depends on:** Tasks 6, 7
 
 ---
 
-### Task 29: The sermon speaks from the self
+### Task 9: End-to-end verify
 
-**What:** The self reading enters the sermon material — day one, movement
-language only.
+**What:** Run the daemon, confirm the full cycle works.
 
 **Details:**
-- `reflect_and_speak` passes `SelfReading` into the writer material as a
-  `"self"` block: "toward X, away from Y" per axis, W's lean, tension —
-  coordinates and counts stripped at material construction (the "numbers
-  belong to the ledger" rule moves from prompt to code).
-- `prompts/sermon-v1.md`: one new paragraph — the self material is measured
-  from the notes and the dreamer's own choices; speak movement and tension;
-  **never attribute the user's movement to the system** (no flattery,
-  promoted to architecture); never invent function language the material
-  doesn't support.
-- `MechanicalSermon` gains one self line — the floor speaks what the dreamer
-  measured, even when the living voice fails.
-- `shelf_check` unchanged — self insights are Insights.
+- Build release: `cargo build --release`
+- Run: `WUNICORM_CHAT_URL=... ./target/release/memory-proto`
+- Confirm:
+  - Tray icon appears in the menu bar
+  - Set dream_time to 1 minute ahead in config
+  - Wait for the dream to trigger
+  - Confirm notes are pulled (check stderr logs)
+  - Confirm dreamer runs (watch the dream log)
+  - Confirm notification fires
+  - Confirm a note appears in the "Wunicorm" folder in Mac Notes
+  - Re-run same day: no re-dream (once-per-day guard)
+  - Re-run next day: dreams again with new/changed notes only
+- `cargo clippy --all-targets -- -D warnings` clean.
 
-**Files:** `src/llm/sermon.rs`, `src/dreamer.rs`, `prompts/sermon-v1.md`
+**Files:** none (verification only)
 
-**Tests:** `tests/sermon.rs` — the writer receives the self block
-(RecordedClient); the floor includes the self line; redaction applies; the
-self block contains no digits (the strip is enforced, then tested).
+**Commit:** `chore: verify end-to-end daemon cycle`
 
-**Depends on:** Task 28
+**Depends on:** Task 8
 
 ---
 
-### Task 30: Full eval — the §8 story grows a self
+### Task 10: Fix the tray runtime
 
-**What:** `tests/full_eval.rs` extends the job-search story with the self pass.
+**What:** Replace the sleep loop with a real macOS application event loop.
 
 **Details:**
-- Anxious cluster (feeling/sensing-tagged judgments) → strategic cluster
-  (thinking/intuiting): assert U moves on both axes between windows; W's core
-  creeps complementward; a rigid one-sided fixture trips compensation; the
-  quiet-day path leaves self states untouched.
-- **Rebuildability**: rebuild from notes + the DreamRun ledger into a second
-  DB → identical SelfState positions — the hysteresis survives because the
-  choices are recorded.
+- Add `tao`; use the Accessory activation policy and no Dock presence.
+- Create the tray on `StartCause::Init`, forward menu events through
+  `EventLoopProxy`, wake the main Core Foundation run loop, and poll the shared
+  icon state with `ControlFlow::WaitUntil`.
+- Quit returns through `run_return` so `main` can join the daemon thread.
 
-**Files:** `tests/full_eval.rs`
+**Files:** `src/tray.rs`, `Cargo.toml`, `Cargo.lock`
 
-**Tests:** the eval is the test.
+**Verification:** build and Clippy clean; the packaged process stays running.
+Visual menu-bar confirmation requires a GUI session.
 
-**Depends on:** Tasks 28, 29
+**Commit:** `fix: run tray in a macOS application event loop`
 
----
-
-### Task 31: Demo + README
-
-**What:** `main.rs` prints the self reading after the dream report (U/W
-positions, lean, rigidity, comp — numbers are fine here; this is the ledger's
-window). README: the ontology table gains the three new tables + Grounds +
-SELF_TRAJECTORY; status refresh; fix the stale `FLOAT[518]` → `FLOAT[768]`.
-
-**Files:** `src/main.rs`, `README.md`
-
-**Tests:** existing suite stays green; the demo is manual.
-
-**Depends on:** Tasks 28, 30
+**Depends on:** Task 9
 
 ---
 
-### Task 32: Paper trail + plan
+### Task 11: Add the macOS app bundle definition
 
-**What:** `PAPER_TRAIL.md` D-002 — "A two-point Jungian function space in the
-memory graph": Decision / Context (the concept and the gate's real numbers) /
-Reasoning (the six guards) / What stays / Revisit triggers (separability below
-threshold → probe fallback; sermon self-language review after the first weeks
-of real dreams). `plan.md`: the memory-layer design subsection — the
-consolidated concept, at home in the design conversation.
+**What:** Metadata and a generated application icon for a menu-bar-only app.
 
-**Files:** `PAPER_TRAIL.md`, `plan.md`
+**Details:**
+- `packaging/macos/Info.plist`: bundle ID `com.wunicorm.app`, executable
+  `wunicorm`, `LSUIElement=true`, and a Notes automation usage description.
+- `packaging/macos/AppIcon.png`: generated 1024×1024 placeholder spiral.
 
-**Tests:** none (docs).
+**Files:** `packaging/macos/Info.plist`, `packaging/macos/AppIcon.png`
 
-**Depends on:** Task 22 (the numbers); effectively all.
+**Verification:** `plutil -lint` passes; the generated image is inspected.
+
+**Commit:** `feat: add macOS app bundle metadata`
+
+**Depends on:** Task 10
+
+---
+
+### Task 12: Add local DMG packaging
+
+**What:** One reproducible script builds the release app and a compressed,
+drag-to-install DMG for the current architecture.
+
+**Details:**
+- `scripts/package-macos.sh` builds release, assembles `Wunicorm.app`, generates
+  `AppIcon.icns`, injects the Cargo version, and creates an Applications symlink.
+- Vendor LadybugDB's `libssl`/`libcrypto`, rewrite the executable and dylib load
+  paths to `@rpath`, include the OpenSSL license, and reject remaining
+  machine-local dependencies.
+- Ad-hoc sign, verify the signature, create the DMG, and run `hdiutil verify`.
+  All generated artifacts stay under `target/packaging/`.
+
+**Files:** `scripts/package-macos.sh`
+
+**Verification:** produced `Wunicorm-0.1.0-arm64.dmg`; bundle and image checks
+pass.
+
+**Commit:** `feat: add local macOS DMG packaging script`
+
+**Depends on:** Task 11
+
+---
+
+### Task 13: Verify installation and document it
+
+**What:** Verify the packaged artifact and record how to build and install it.
+
+**Details:**
+- All 177 Rust tests pass; Clippy is clean.
+- Mount the DMG read-only; verify its executable, Applications symlink, plist,
+  and app signature.
+- Launch the packaged app and verify that its process remains running. The
+  terminal lacks accessibility/screen-capture permission, so visual inspection
+  of the menu-bar icon remains a user acceptance check.
+- README documents daemon/demo commands, packaging, installation, permissions,
+  data preservation, and the local-signing limitation.
+
+**Files:** `README.md`, `AGILE.md`
+
+**Commit:** `docs: document macOS DMG installation`
+
+**Depends on:** Task 12
 
 ---
 
 ## Commit sequence
 
 ```
-Task 20 → feat: add schema evolution (versioned migrations, IF NOT EXISTS retrofit)
-Task 21 → feat: add the axes (anchor corpus, pole centroids, signed coordinates)
-Task 22 → test: add the anchor separability gate
-Task 23 → feat: add the self tables (anchors, self states, dream runs, columns)
-Task 24 → feat: add grounds edges + self trajectory
-Task 25 → feat: add psyche reads (positions, rigidity, function drift)
-Task 26 → feat: tag memories by function (the extractor seam)
-Task 27 → feat: record the dreamer's choices (dream run ledger)
-Task 28 → feat: add the self pass (working the self in the dream)
-Task 29 → feat: let the sermon speak from the self
-Task 30 → test: extend the full eval (self pass, rebuildable self states)
-Task 31 → feat: demo the self reading; refresh the readme
-Task 32 → docs: record D-002 (two-point function space) + plan.md subsection
+Task 1 → refactor: move demo to examples, stub daemon main
+Task 2 → feat: add config layer (TOML, defaults, env overrides)
+Task 3 → feat: add notes ingress (osascript bridge, change detection)
+Task 4 → feat: add scheduler and state persistence
+Task 5 → feat: add output layer (macOS notifications, Notes writer)
+Task 6 → feat: add tray icon with state indicator
+Task 7 → feat: add daemon loop (sleep, check, dream, output)
+Task 8 → feat: wire daemon entry point (config, db, tray, worker)
+Task 9 → chore: verify end-to-end daemon cycle
+Task 10 → fix: run tray in a macOS application event loop
+Task 11 → feat: add macOS app bundle metadata
+Task 12 → feat: add local macOS DMG packaging script
+Task 13 → docs: document macOS DMG installation
 ```
 
 Each commit: `cargo clippy --all-targets -- -D warnings` clean, `cargo tst`
-green.
+green (alias for `test -- --test-threads=1`).
 
 ---
 
 ## Resolved decisions
 
 | Question | Decision |
-|----------|----------|
-| `chrono` vs `time` | Keep `chrono` in structs; private conversion helpers where lbug needs `time::OffsetDateTime` |
-| Embedding dim in tests | Parameterize schema DDL by dim so tests can use small dims |
-| `emotions STRING[]` | `Value::Array(LogicalType::String, ...)`; smoke test in mutations |
-| Axes construction | Contrastive pole centroids; coordinate = cos(x, own-pole) − cos(x, opposite-pole), per axis |
-| Anchor corpus | LLM-drafted, human-reviewed, frozen in `prompts/anchors-v1.md`; seeded + versioned as `FunctionAnchor` rows |
-| Function attribution | The extractor tags each memory with one required function enum — the four questions become the four functions |
-| W's evidence | Choices only — kept/dropped per function; drops dilute confidence (δ), never push position |
-| Choice ledger | Per-run aggregates on one `DreamRun` node (considered/dropped ids, per-function kept counts) |
-| Rigidity | Straightness index (net displacement ÷ path length); compensation is gated on rigidity, never direction |
-| Compensation | W = damped core (α) + fast component (k_eff, rigidity-gated) targeting dyad balance; constants in one block, logged per run |
-| Sermon voice | Speaks from the self from day one; movement language only; numbers stripped at material construction, not by prompt |
-| Migration style | Idempotent DDL batches + version marker written after each batch; transactional DDL only if proven safe |
-| Anisotropy | Corpus-mean centering (all-but-the-top) before pole geometry — the raw space failed the gate at 0.94 opposite-pole cosine; centered, T·F −0.35, S·N −0.27 |
-| Corpus calibration | The gate is the review instrument: v1's first draft failed on 7 cross-register exemplars (contrasts, diagnostics, mood); the revision keeps every pole pure register — LOO 1.0/1.0/1.0/0.9 |
+|---|---|
+| Web app | Removed. Mac Notes is the input surface. |
+| Tailscale | Removed. Local-only. |
+| Notes DB | Mac Notes (the app's own storage). No separate notes store. |
+| Note ID | Core Data URI from AppleScript (`id of note`) |
+| Change detection | Modification date comparison (not content hashing) |
+| HTML handling | Strip to text for the LLM; keep HTML for writing back to Notes |
+| Threading | Main = tray (Cocoa); worker = daemon loop |
+| State file | `~/Library/Application Support/memory-proto/state.json` on macOS (last_seen + last_dream_date) |
+| DB path | `~/Library/Application Support/memory-proto/memory.db` on macOS |
+| Config path | `~/Library/Application Support/memory-proto/config.toml` on macOS |
+| Tray icon format | 22x22 monochrome PNG (macOS template) |
+| Tray runtime | `tao` main-thread event loop; tray created on `StartCause::Init`; Accessory activation policy |
+| App bundle | `Wunicorm.app`, `com.wunicorm.app`, `LSUIElement=true` |
+| DMG architecture | Current Mac only for v1 |
+| DMG signing | Local ad-hoc signature; Developer ID/notarization deferred |
+| Native dependencies | Vendor and re-sign OpenSSL dylibs; rewrite load paths to `@rpath`; include license |
+| Shutdown | SIGINT/SIGTERM or tray Quit → graceful join |
+| Error handling | Log to stderr, continue the loop. Never die for one bad night. |

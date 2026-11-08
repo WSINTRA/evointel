@@ -54,18 +54,52 @@ Plain rel tables: `TIME_HIERARCHY` (Time → Time) and `SELF_TRAJECTORY` (SelfSt
 ## Getting started
 
 ```bash
-cargo run          # the live demo dream: seeds the axes, dreams, prints the self reading + sermon
-cargo test         # integration tests (serial: cargo tst)
-cargo clippy       # lint (CI: --all-targets -- -D warnings)
+cargo run                 # the resident menu-bar daemon (dreams at the configured time)
+cargo run --example demo  # the live §8 demo dream: seeds the axes and prints the self reading
+cargo test                # integration tests (serial: cargo tst)
+cargo clippy              # lint (CI: --all-targets -- -D warnings)
 ```
 
-The demo and the live gate need the local servers (`WUNICORM_EMBED_URL`, chat endpoint); everything else is hermetic.
+The daemon reads `~/Library/Application Support/memory-proto/config.toml` on
+macOS and creates it with a default dream time of `22:00` on first run. The
+demo and the live gate need the local servers (`WUNICORM_EMBED_URL`, chat
+endpoint); everything else is hermetic.
+
+## macOS app and DMG
+
+Build a self-contained app and drag-to-install DMG for the current Mac
+architecture:
+
+```bash
+./scripts/package-macos.sh
+```
+
+The artifact is written to `target/packaging/Wunicorm-<version>-<arch>.dmg`.
+Mount it and drag `Wunicorm.app` to `Applications`. The app runs as a menu-bar
+agent without a Dock icon. On first use, allow the macOS prompts for Notes
+automation and notifications.
+
+The packaging script vendors LadybugDB's OpenSSL dependencies into the app,
+rewrites their load paths, includes the OpenSSL license, verifies the bundle,
+and ad-hoc signs it. The DMG is intended for local use; it is not Developer ID
+signed or notarized, so Gatekeeper may warn if it is copied to another Mac.
+
+Configuration, state, the graph database, and dream artifacts remain in
+`~/Library/Application Support/memory-proto/`; reinstalling the app does not
+replace them. Quit any running CLI daemon before launching the app so two
+processes do not share the database.
 
 ## Project layout
 
 ```
 src/
-  main.rs           # the live demo dream (seeds the axes, prints the self reading)
+  main.rs           # daemon entry: config, DB, worker thread, macOS tray event loop
+  daemon.rs         # sleep → schedule → ingest → dream → output
+  config.rs         # TOML configuration and platform data paths
+  ingest.rs         # Mac Notes osascript bridge, HTML stripping, change detection
+  scheduler.rs      # dream-time check, once-per-day guard, persisted state
+  output.rs         # macOS notifications and the Wunicorm Notes writer
+  tray.rs           # tao event loop, menu, idle/dreaming/notification icons
   axes.rs           # the function axes: corpus, pole centroids, coordinates, the gate metrics
   dreamer.rs        # run_dream: judge → write → choice ledger → self pass → reflect → speak
   observability.rs  # DreamReport + SelfPassReport, the JSONL dream ledger, nightmare detector
@@ -75,6 +109,9 @@ src/
   queries/          # read path: fetch, traversal, drift, psyche, snapshot, temporal
   message.rs        # the outbox artifact + shelf check
   vector.rs         # HNSW index init + semantic search
+examples/demo.rs    # the original live §8 demo dream
+packaging/macos/    # Info.plist and the generated app-icon source
+scripts/            # package-macos.sh: app bundle, vendored dylibs, ad-hoc sign, DMG
 prompts/            # extract-v1.md, sermon-v1.md, schema-v1.json, anchors-v1.md (the frozen corpus)
 tests/              # per-area suites + full_eval (the end-to-end story) + anchor_eval (the gate)
 ```
@@ -90,3 +127,6 @@ The prototype build-out (old Tasks 1-19) and the function space (Tasks 20-31, se
 - [x] The sermon speaks from the self (movement language only; numbers stripped at construction)
 - [x] Versioned migrations (idempotent batches, in-place upgrades, transactional-DDL semantics pinned)
 - [x] Full eval: the §8 story on the axes, SelfState rebuildability
+- [x] Resident daemon: Mac Notes ingress, scheduler, notifications, Notes writer
+- [x] Menu-bar tray on a real macOS event loop, with idle/dreaming/notification states
+- [x] Local app bundle and verified DMG packaging (vendored OpenSSL, ad-hoc signature)
