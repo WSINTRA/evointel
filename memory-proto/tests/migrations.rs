@@ -143,6 +143,67 @@ fn partial_schema_converges() {
     );
 }
 
+/// The real upgrade path: a v1 DB (pre-function-space) with live data
+/// migrates to v2 in place — new tables appear, existing tables gain
+/// their columns, old rows survive with NULL in the new columns.
+#[test]
+fn v1_db_migrates_to_v2_with_data_intact() {
+    let (_dir, db) = temp_db();
+    let conn = db.connect().unwrap();
+
+    // The v1 world: only batch 1 applied, the marker at 1, real data.
+    // (A historical v1 DB has no marker at all — version 0 — which the
+    // other convergence tests cover; this fixture is the forward shape:
+    // a marked DB one version behind.)
+    let v1 = &memory_proto::schema::migrations::batches()[0].1;
+    for ddl in v1 {
+        conn.query(ddl).unwrap();
+    }
+    conn.query(memory_proto::schema::meta::SCHEMA_META_T)
+        .unwrap();
+    memory_proto::schema::meta::set_schema_version(&conn, 1).unwrap();
+    conn.query(
+        "CREATE (n:Note {id: 'v1-note', content: 'before the function space',
+            created_at: timestamp('2026-01-01'), updated_at: timestamp('2026-01-01')});",
+    )
+    .unwrap();
+
+    schema::init(&conn).unwrap();
+
+    // v2 arrived: new tables, new columns, old data intact.
+    assert_eq!(
+        schema::meta::schema_version(&conn).unwrap(),
+        schema::latest_version()
+    );
+    assert!(table_exists(&conn, "FunctionAnchor"));
+    assert!(table_exists(&conn, "SelfState"));
+    assert!(table_exists(&conn, "DreamRun"));
+    // The derived Note columns are probeable (binder error if absent)
+    // and NULL for pre-existing rows — no signal, not a fabricated one.
+    let result = conn
+        .query("MATCH (n:Note {id: 'v1-note'}) RETURN n.judgment_coord, n.perception_coord;")
+        .unwrap();
+    for row in result {
+        assert!(matches!(row[0], lbug::Value::Null(_)));
+        assert!(matches!(row[1], lbug::Value::Null(_)));
+    }
+    // The Memory columns too.
+    assert!(
+        conn.query("MATCH (m:Memory) RETURN m.function_tag, m.run_id;")
+            .is_ok()
+    );
+    assert_eq!(
+        count(&conn, "MATCH (n:Note {id: 'v1-note'}) RETURN count(n);"),
+        1
+    );
+    // And a re-run is a no-op at v2.
+    schema::init(&conn).unwrap();
+    assert_eq!(
+        schema::meta::schema_version(&conn).unwrap(),
+        schema::latest_version()
+    );
+}
+
 /// Pinned empirically (Task 20) against lbug 0.22.1, both halves:
 ///
 /// 1. DDL **is** transactional in the small: `BEGIN` + CREATE + `ROLLBACK`

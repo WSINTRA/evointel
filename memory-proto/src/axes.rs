@@ -92,6 +92,25 @@ pub enum Axis {
     Perception,
 }
 
+impl Axis {
+    /// The schema spelling — `FunctionAnchor.axis`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Axis::Judgment => "judgment",
+            Axis::Perception => "perception",
+        }
+    }
+
+    /// Parses the schema spelling; anything else is `None`.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "judgment" => Some(Axis::Judgment),
+            "perception" => Some(Axis::Perception),
+            _ => None,
+        }
+    }
+}
+
 /// One corpus exemplar: a text and the pole it belongs to.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Exemplar {
@@ -472,6 +491,14 @@ mod tests {
     use super::*;
 
     const CORPUS: &str = include_str!("../prompts/anchors-v1.md");
+
+    #[test]
+    fn axis_strings_roundtrip() {
+        assert_eq!(Axis::parse("judgment"), Some(Axis::Judgment));
+        assert_eq!(Axis::parse("perception"), Some(Axis::Perception));
+        assert_eq!(Axis::parse("valor"), None);
+        assert_eq!(Axis::Judgment.as_str(), "judgment");
+    }
 
     #[test]
     fn function_strings_roundtrip_and_map_to_axes() {
