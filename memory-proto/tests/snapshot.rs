@@ -1,13 +1,13 @@
 use chrono::DateTime;
+use memory_proto::MemoryDb;
 use memory_proto::edges::{Contains, Similar};
 use memory_proto::mutations::{
-    insert_entity, insert_fact, insert_note, insert_time, link_contains, link_similar,
-    wire_time_hierarchy, NodeRef,
+    NodeRef, insert_entity, insert_fact, insert_note, insert_time, link_contains, link_similar,
+    wire_time_hierarchy,
 };
 use memory_proto::nodes::{Entity, Fact, Note, Time};
-use memory_proto::queries::{graph_snapshot, structural_similarity, GraphSnapshot};
+use memory_proto::queries::{GraphSnapshot, graph_snapshot, structural_similarity};
 use memory_proto::schema::EMBEDDING_DIM;
-use memory_proto::MemoryDb;
 
 type NodeSpec<'a> = (&'a str, &'a str);
 type EdgeSpec<'a> = (&'a str, NodeSpec<'a>, NodeSpec<'a>);
@@ -285,18 +285,22 @@ fn rebuild_with_different_ids_scores_one() {
     // contain what we wrote — including the edge triple with full
     // semantic keys extracted from returned nodes.
     assert!(!s1.is_empty(), "snapshot should not be empty");
-    assert!(s1
-        .nodes
-        .contains(&("Entity".to_string(), "coffee".to_string())));
-    assert!(s1
-        .nodes
-        .contains(&("Note".to_string(), "shopping for coffee".to_string())));
-    assert!(s1
-        .nodes
-        .contains(&("Time".to_string(), "November 3, 2026".to_string())));
-    assert!(s1
-        .nodes
-        .contains(&("Contains".to_string(), "note mentions coffee".to_string())));
+    assert!(
+        s1.nodes
+            .contains(&("Entity".to_string(), "coffee".to_string()))
+    );
+    assert!(
+        s1.nodes
+            .contains(&("Note".to_string(), "shopping for coffee".to_string()))
+    );
+    assert!(
+        s1.nodes
+            .contains(&("Time".to_string(), "November 3, 2026".to_string()))
+    );
+    assert!(
+        s1.nodes
+            .contains(&("Contains".to_string(), "note mentions coffee".to_string()))
+    );
     let expected_edges: std::collections::BTreeSet<(_, _, _)> = [
         (
             "Contains",
@@ -355,9 +359,10 @@ fn torn_edge_write_visible_in_snapshot() {
     let s2 = graph_snapshot(&c2).unwrap();
 
     // The edge node exists as a node...
-    assert!(s2
-        .nodes
-        .contains(&("Contains".to_string(), "note mentions coffee".to_string())));
+    assert!(
+        s2.nodes
+            .contains(&("Contains".to_string(), "note mentions coffee".to_string()))
+    );
     // ...but contributes no Contains triple — the torn write is visible.
     // (The fixture's Similar edge survives; only Contains was torn.)
     assert!(
