@@ -1,5 +1,7 @@
 pub mod edge_nodes;
 pub mod entity_nodes;
+pub mod meta;
+pub mod migrations;
 pub mod poly_relations;
 pub mod relations;
 pub mod time_tree;
@@ -9,20 +11,15 @@ use lbug::Connection;
 use crate::db::DbResult;
 
 pub use entity_nodes::EMBEDDING_DIM;
+pub use migrations::latest_version;
 
+/// Creates or migrates the schema to [`latest_version`].
+///
+/// Idempotent: safe on every open, fresh DB or old — the version marker
+/// decides what runs. Before Task 20 this was create-only and callers
+/// guarded it with file-existence checks; an older DB was silently never
+/// migrated. Now `init` *is* the migration.
 pub fn init(conn: &Connection) -> DbResult<()> {
-    // Entity tables carry the embedding column, so their width is
-    // rendered from EMBEDDING_DIM; the rest are static.
-    for ddl in entity_nodes::entity_node_ddls() {
-        conn.query(&ddl)?;
-    }
-    for ddl in edge_nodes::ALL_EDGE_NODE_DDLS
-        .iter()
-        .chain(relations::ALL_RELATION_DDLS.iter())
-        .chain(poly_relations::ALL_POLY_RELATIONS.iter())
-        .chain(time_tree::ALL_TIME_TREE_DDLS.iter())
-    {
-        conn.query(ddl)?;
-    }
+    migrations::migrate(conn)?;
     Ok(())
 }

@@ -36,15 +36,14 @@ fn main() {
     let outbox = root.join("outbox");
     std::fs::create_dir_all(&outbox).expect("create demo dirs");
     let db_path = root.join("dream.db");
-    let is_new = !db_path.exists();
 
     let db = MemoryDb::open(&db_path, EMBEDDING_DIM).expect("open dream db");
     let conn = db.connect().expect("connect");
     extensions::load_extensions(&conn).expect("load extensions");
-    if is_new {
-        schema::init(&conn).expect("init schema");
-        vector::init_vector_indexes(&conn).expect("init vector indexes");
-    }
+    // Migrates in place: an old dream.db upgrades instead of being
+    // left behind (Task 20) — init is idempotent on every open.
+    schema::init(&conn).expect("init or migrate schema");
+    vector::init_vector_indexes(&conn).expect("init vector indexes");
 
     // The §8 story, dated so the calendar fires.
     let mut queue = vec![

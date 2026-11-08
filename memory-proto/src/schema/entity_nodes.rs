@@ -13,7 +13,7 @@ pub const EMBEDDING_DIM: usize = 768;
 
 // Raw user input -- the ground truth. Everything else is derived from notes.
 const NOTE_T: &str = r"
-CREATE NODE TABLE Note(
+CREATE NODE TABLE IF NOT EXISTS Note(
     id                STRING PRIMARY KEY,
     content           STRING,
     content_embedding FLOAT[{dim}],
@@ -25,7 +25,7 @@ CREATE NODE TABLE Note(
 ";
 
 const ENTITY_T: &str = r"
-CREATE NODE TABLE Entity(
+CREATE NODE TABLE IF NOT EXISTS Entity(
     id              STRING PRIMARY KEY,
     label           STRING,
     label_resolved  STRING,
@@ -40,7 +40,7 @@ CREATE NODE TABLE Entity(
 ";
 
 const TIME_T: &str = r"
-CREATE NODE TABLE Time(
+CREATE NODE TABLE IF NOT EXISTS Time(
     id              STRING PRIMARY KEY,
     granularity     STRING,
     starts_at       TIMESTAMP,
@@ -58,7 +58,7 @@ CREATE NODE TABLE Time(
 
 // Examples include, 'future', 'soon', 'never'. Let the agent anchor events to fuzzy temporal events
 const ABSTRACT_TIME_T: &str = r"
-CREATE NODE TABLE AbstractTime(
+CREATE NODE TABLE IF NOT EXISTS AbstractTime(
     id              STRING PRIMARY KEY,
     semantics       STRING,
     label           STRING,
@@ -75,7 +75,7 @@ CREATE NODE TABLE AbstractTime(
 //A fact like 'a dog belongs to the k9 family' would have predicate "belongs_to", certainty: 1.0,
 //source: 'general_knowledge'.
 const FACT_T: &str = r"
-CREATE NODE TABLE Fact(
+CREATE NODE TABLE IF NOT EXISTS Fact(
     id              STRING PRIMARY KEY,
     predicate       STRING,
     certainty       DOUBLE DEFAULT 1.0,
@@ -95,7 +95,7 @@ CREATE NODE TABLE Fact(
 // the status field captures, the state of event, 'occured', 'planned', 'cancelled', 'potential',
 // the is_going marks in progress
 const EVENT_T: &str = r"
-CREATE NODE TABLE Event(
+CREATE NODE TABLE IF NOT EXISTS Event(
     id              STRING PRIMARY KEY,
     predicate       STRING,
     certainty       DOUBLE DEFAULT 1.0,
@@ -121,7 +121,7 @@ CREATE NODE TABLE Event(
 //get from this, what can I intuite from this, where am I thinking this will go, what do my
 //feelings tell me.
 const MEMORY_T: &str = r"
-CREATE NODE TABLE Memory(
+CREATE NODE TABLE IF NOT EXISTS Memory(
     id              STRING PRIMARY KEY,
     predicate       STRING,
     certainty       DOUBLE DEFAULT 1.0,
