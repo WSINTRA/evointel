@@ -186,8 +186,8 @@ fn trajectory(conn: &Connection, subject: &str, span: usize) -> DbResult<Vec<Tra
 /// The straightness index on one axis over the trailing `span` self
 /// states: net displacement ÷ path length, in `[0, 1]`. Near `1` is a
 /// rigid line — the same stance held across windows; near `0` is
-/// wandering. Fewer than two states or no movement → `0.0` (not stuck
-/// — unmeasured).
+/// wandering. Fewer than three states → `0.0`: two points are always a
+/// straight line, and one swing is movement, not stuckness.
 pub fn rigidity(conn: &Connection, subject: &str, axis: Axis, span: usize) -> DbResult<f32> {
     let points = trajectory(conn, subject, span)?;
     let coords: Vec<f32> = points
@@ -205,7 +205,10 @@ pub fn rigidity(conn: &Connection, subject: &str, axis: Axis, span: usize) -> Db
 
 /// Pure straightness: `|last − first| ÷ Σ|consecutive steps|`.
 fn straightness(coords: &[f32]) -> f32 {
-    if coords.len() < 2 {
+    if coords.len() < 3 {
+        // Two points are always a straight line — one swing is
+        // movement, not stuckness. Rigidity is a claim that needs a
+        // trajectory behind it.
         return 0.0;
     }
     let net = (coords[coords.len() - 1] - coords[0]).abs();

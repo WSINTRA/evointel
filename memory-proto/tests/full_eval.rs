@@ -593,3 +593,326 @@ fn nightmare_is_detected_then_healed_by_rerun() {
     assert!(outbox.join("run-1-sermon.json").exists());
     assert!(outbox.join("run-2-sermon.json").exists());
 }
+
+// ─── The story grows a self ──────────────────────────────────────────
+//
+// The §8 arc told on the function axes: November's anxious cluster sits
+// feeling-intuiting-ward, February's strategic cluster lands
+// thinking-sensing-ward, and two dreams walk the user across both axes
+// while Wunicorm's core creeps behind its choices.
+
+fn seed_eval_axes(conn: &lbug::Connection) {
+    use memory_proto::mutations::seed_function_anchors;
+    use memory_proto::nodes::FunctionAnchor;
+    let now = ts(T_A);
+    // The axes aligned to the story's clusters: feeling shares the
+    // anxious cluster's basis (1), thinking the strategic one's (2);
+    // sensing and intuiting take their own bases.
+    let poles: [(&str, &str, usize); 4] = [
+        ("thinking", "judgment", 2),
+        ("feeling", "judgment", 1),
+        ("sensing", "perception", 3),
+        ("intuiting", "perception", 4),
+    ];
+    let anchors: Vec<FunctionAnchor> = poles
+        .iter()
+        .flat_map(|(function, axis, basis)| {
+            (1..=2).map(move |k| FunctionAnchor {
+                id: format!("fa-eval-{function}-{k}"),
+                function: function.to_string(),
+                axis: axis.to_string(),
+                exemplar: format!("eval exemplar {k}"),
+                embedding: Some(one_hot(*basis)),
+                active: true,
+                created_at: now,
+                updated_at: now,
+                layer: 0,
+                context: "full-eval".to_string(),
+            })
+        })
+        .collect();
+    seed_function_anchors(conn, &anchors).unwrap();
+}
+
+fn eval_memory(id: &str, function: &str, at: i64) -> memory_proto::nodes::Memory {
+    memory_proto::nodes::Memory {
+        id: id.to_string(),
+        predicate: "felt".to_string(),
+        certainty: 1.0,
+        source: "full-eval".to_string(),
+        status: "occurred".to_string(),
+        is_ongoing: false,
+        significance: "why it matters".to_string(),
+        emotions: vec![],
+        reflection: "what to make of it".to_string(),
+        function_tag: Some(function.to_string()),
+        run_id: None,
+        label: id.to_string(),
+        label_resolved: id.to_string(),
+        label_embedding: None,
+        learned_at: ts(at),
+        expire_at: None,
+        created_at: ts(at),
+        updated_at: ts(at),
+        layer: 4,
+        context: "full-eval".to_string(),
+    }
+}
+
+/// An embedding that blends two poles equally, then renormalizes —
+/// feeling-intuiting for the anxious cluster, thinking-sensing for the
+/// strategic one.
+fn blend(a: usize, b: usize) -> Vec<f32> {
+    let mut v = one_hot(a);
+    for (i, x) in one_hot(b).iter().enumerate() {
+        v[i] += x;
+    }
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    v.iter().map(|x| x / norm).collect()
+}
+
+fn self_story_batch(p: &str) -> (Vec<Note>, Vec<DreamJudgment>, Vec<Note>, Vec<DreamJudgment>) {
+    // November: two anxious notes, feeling-intuiting-ward.
+    let nov_queue = vec![
+        note(
+            &format!("{p}-s-n-a1"),
+            "applied to five companies today, feeling anxious about it all",
+            blend(1, 4),
+            T_A,
+        ),
+        note(
+            &format!("{p}-s-n-a2"),
+            "can't stop imagining how each application might go wrong",
+            blend(1, 4),
+            T_A,
+        ),
+    ];
+    let nov_judgments = vec![
+        DreamJudgment {
+            note_id: format!("{p}-s-n-a1"),
+            entities: vec![entity(
+                &format!("{p}-s-e-job"),
+                "job search",
+                one_hot(0),
+                T_A,
+            )],
+            facts: vec![],
+            events: vec![],
+            memories: vec![
+                eval_memory(&format!("{p}-s-m-a1f"), "feeling", T_A),
+                eval_memory(&format!("{p}-s-m-a1n"), "intuiting", T_A),
+            ],
+            times: vec![],
+            hierarchy: vec![],
+            contains: vec![(
+                r(&format!("{p}-s-n-a1"), "Note"),
+                r(&format!("{p}-s-e-job"), "Entity"),
+                contains_props(&format!("{p}-s-c-a1")),
+            )],
+            similar: vec![],
+            has_property: vec![],
+            leads_to: vec![],
+        },
+        DreamJudgment {
+            note_id: format!("{p}-s-n-a2"),
+            entities: vec![],
+            facts: vec![],
+            events: vec![],
+            memories: vec![eval_memory(&format!("{p}-s-m-a2f"), "feeling", T_A)],
+            times: vec![],
+            hierarchy: vec![],
+            contains: vec![],
+            similar: vec![],
+            has_property: vec![],
+            leads_to: vec![],
+        },
+    ];
+
+    // February: one strategic note, thinking-sensing-ward.
+    let feb_queue = vec![note(
+        &format!("{p}-s-n-b1"),
+        "scheduled interviews with three companies, working the plan concretely",
+        blend(2, 3),
+        T_B,
+    )];
+    let feb_judgments = vec![DreamJudgment {
+        note_id: format!("{p}-s-n-b1"),
+        entities: vec![],
+        facts: vec![],
+        events: vec![],
+        memories: vec![
+            eval_memory(&format!("{p}-s-m-b1t"), "thinking", T_B),
+            eval_memory(&format!("{p}-s-m-b1s"), "sensing", T_B),
+        ],
+        times: vec![],
+        hierarchy: vec![],
+        contains: vec![(
+            r(&format!("{p}-s-n-b1"), "Note"),
+            r(&format!("{p}-s-e-job"), "Entity"),
+            contains_props(&format!("{p}-s-c-b1")),
+        )],
+        similar: vec![],
+        has_property: vec![],
+        leads_to: vec![],
+    }];
+
+    (nov_queue, nov_judgments, feb_queue, feb_judgments)
+}
+
+fn self_states(conn: &lbug::Connection) -> Vec<(String, i64, f64, f64)> {
+    let mut out: Vec<(String, i64, f64, f64)> = vec![];
+    let result = conn
+        .query("MATCH (s:SelfState) RETURN s.subject, s.window_start, s.judgment_coord, s.perception_coord;")
+        .unwrap();
+    for row in result {
+        if let [
+            lbug::Value::String(subject),
+            lbug::Value::Timestamp(at),
+            lbug::Value::Double(j),
+            lbug::Value::Double(p),
+        ] = row.as_slice()
+        {
+            out.push((subject.clone(), at.unix_timestamp(), *j, *p));
+        }
+    }
+    out.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
+    out
+}
+
+#[test]
+fn the_story_grows_a_self_and_it_rebuilds() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open_test_db(&dir.path().join("self.db"));
+    let conn = db.connect().unwrap();
+    seed_eval_axes(&conn);
+    let outbox = dir.path().join("outbox");
+    let log = dir.path().join("logs").join("dreams.jsonl");
+
+    let (nov_queue, nov_judgments, feb_queue, feb_judgments) = self_story_batch("a");
+    let nov_windows: TimeWindows = (
+        (ts(T_A - 86_400), ts(T_A + 86_400)),
+        (ts(T_A - 86_400), ts(T_A + 86_400)),
+    );
+    let feb_windows: TimeWindows = (
+        (ts(T_A - 86_400), ts(T_A + 86_400)),
+        (ts(T_B - 86_400), ts(T_B + 86_400)),
+    );
+
+    let nov_spec = DreamSpec {
+        run_id: "self-nov".to_string(),
+        queue: nov_queue,
+        anchor_embedding: one_hot(0),
+        drift_windows: Some(nov_windows),
+        outbox: outbox.clone(),
+        dream_log: log.clone(),
+    };
+    let feb_spec = DreamSpec {
+        run_id: "self-feb".to_string(),
+        queue: feb_queue,
+        anchor_embedding: one_hot(0),
+        drift_windows: Some(feb_windows),
+        outbox,
+        dream_log: log,
+    };
+
+    let nov_report = run_dream(
+        &conn,
+        &FixedJudge::new(nov_judgments),
+        &MechanicalSermon,
+        &nov_spec,
+    );
+    assert!(nov_report.errors.is_empty(), "{:?}", nov_report.errors);
+    let nov_self = nov_report.self_pass.expect("the self was worked");
+    // November: feeling-intuiting-ward — negative on both axes.
+    let nov_user = nov_self.user_position.expect("measured");
+    assert!(nov_user.0 < -0.5, "feeling-ward, got {}", nov_user.0);
+    assert!(nov_user.1 < -0.5, "intuiting-ward, got {}", nov_user.1);
+
+    let feb_report = run_dream(
+        &conn,
+        &FixedJudge::new(feb_judgments),
+        &MechanicalSermon,
+        &feb_spec,
+    );
+    assert!(feb_report.errors.is_empty(), "{:?}", feb_report.errors);
+    let feb_self = feb_report.self_pass.expect("the self was worked");
+    let feb_user = feb_self.user_position.expect("measured");
+
+    // The user moved on BOTH axes: toward thinking and toward sensing.
+    let drift = feb_self.drift.expect("two windows — drift is readable");
+    assert!(drift.0 > 1.0, "toward thinking, got {}", drift.0);
+    assert!(drift.1 > 1.0, "toward sensing, got {}", drift.1);
+    assert!(
+        feb_user.0 > 0.5 && feb_user.1 > 0.5,
+        "strategic cluster: {feb_user:?}"
+    );
+
+    // The swing is honest exploration, not stuckness: no compensation.
+    assert!(
+        feb_self.wunicorm_comp.0.abs() < 1e-6 && feb_self.wunicorm_comp.1.abs() < 1e-6,
+        "a mover is not compensated: {:?}",
+        feb_self.wunicorm_comp
+    );
+
+    // W's core crept behind its choices — damped, smaller than the
+    // observation it absorbed.
+    let (core_j, core_p) = feb_self.wunicorm_core;
+    assert!(
+        core_j > 0.0 && core_p > 0.0,
+        "crept strategic-ward: {core_j}, {core_p}"
+    );
+    assert!(core_j < 1.0 && core_p < 1.0, "damped — months, not windows");
+
+    // The trajectories wired: two states each, one edge each.
+    let result = conn
+        .query("MATCH ()-[r:SELF_TRAJECTORY]->() RETURN count(r);")
+        .unwrap();
+    for row in result {
+        assert_eq!(row[0], lbug::Value::Int64(2), "user + wunicorm lines");
+    }
+
+    // ── Rebuildability: the hysteresis survives because the choices
+    // are recorded — same notes, same ledger, same judgments into a
+    // second DB reproduce the self exactly.
+    let dir_b = tempfile::tempdir().unwrap();
+    let db_b = open_test_db(&dir_b.path().join("self-b.db"));
+    let conn_b = db_b.connect().unwrap();
+    seed_eval_axes(&conn_b);
+    let (nov_q2, nov_j2, feb_q2, feb_j2) = self_story_batch("b");
+    let spec_b_nov = DreamSpec {
+        run_id: "self-nov".to_string(),
+        queue: nov_q2,
+        anchor_embedding: one_hot(0),
+        drift_windows: Some(nov_windows),
+        outbox: dir_b.path().join("outbox"),
+        dream_log: dir_b.path().join("dreams.jsonl"),
+    };
+    let spec_b_feb = DreamSpec {
+        run_id: "self-feb".to_string(),
+        queue: feb_q2,
+        anchor_embedding: one_hot(0),
+        drift_windows: Some(feb_windows),
+        outbox: dir_b.path().join("outbox"),
+        dream_log: dir_b.path().join("dreams.jsonl"),
+    };
+    run_dream(
+        &conn_b,
+        &FixedJudge::new(nov_j2),
+        &MechanicalSermon,
+        &spec_b_nov,
+    );
+    run_dream(
+        &conn_b,
+        &FixedJudge::new(feb_j2),
+        &MechanicalSermon,
+        &spec_b_feb,
+    );
+
+    let states_a = self_states(&conn);
+    let states_b = self_states(&conn_b);
+    assert_eq!(states_a.len(), 4, "two states per subject");
+    assert_eq!(
+        states_a, states_b,
+        "the self is derived: same evidence, same positions"
+    );
+}

@@ -222,6 +222,19 @@ fn rigidity_needs_a_trajectory() {
     assert_eq!(rigidity(&conn, "user", Axis::Judgment, 4).unwrap(), 0.0);
     state_at(&conn, "s-1", "user", 1, (0.5, 0.5));
     assert_eq!(rigidity(&conn, "user", Axis::Judgment, 4).unwrap(), 0.0);
+    // Two points are always a straight line — one swing is movement,
+    // not stuckness. Rigidity waits for a third window.
+    state_at(&conn, "s-2", "user", 28, (0.9, 0.9));
+    assert_eq!(
+        rigidity(&conn, "user", Axis::Judgment, 4).unwrap(),
+        0.0,
+        "two points cannot establish rigidity"
+    );
+    state_at(&conn, "s-3", "user", 56, (1.3, 1.3));
+    assert!(
+        rigidity(&conn, "user", Axis::Judgment, 4).unwrap() > 0.99,
+        "three in a line — now it is stuckness"
+    );
 }
 
 // ─── function_drift ──────────────────────────────────────────────────
