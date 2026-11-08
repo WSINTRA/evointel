@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
 use lbug::{Connection, NodeVal, Value};
+use serde::{Deserialize, Serialize};
 
 use crate::db::DbResult;
 use crate::mutations::NodeRef;
@@ -30,7 +31,7 @@ pub struct Activity {
 }
 
 /// The change in a concept's neighborhood between two windows.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Drift {
     /// `1 - cosine(centroid_from, centroid_to)` in `[0, 2]`.
     /// Zero means the semantic atmosphere did not move.

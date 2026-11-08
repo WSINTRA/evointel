@@ -11,6 +11,7 @@ path = "src/lib.rs"
 chrono = { version = "0.4.45", features = ["serde"] }
 lbug = "0.22.1"
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 thiserror = "2.0.21"
 time = "0.3"
 uuid = { version = "1.29.0", features = ["serde", "v4"] }

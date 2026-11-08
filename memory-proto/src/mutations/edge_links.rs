@@ -1,4 +1,5 @@
 use lbug::{Connection, Value};
+use serde::{Deserialize, Serialize};
 
 use crate::db::DbResult;
 use crate::edges::{
@@ -10,7 +11,7 @@ use super::{chrono_to_time, chrono_to_time_opt};
 
 /// A typed reference to a graph node. The `label` is the Cypher table name
 /// (e.g. "Note", "Entity") used to build `MATCH (a:Label {id: $id})` clauses.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeRef {
     pub id: String,
     pub label: String,
