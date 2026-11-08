@@ -1,3 +1,4 @@
+pub mod axes;
 pub mod db;
 pub mod dreamer;
 pub mod edges;
