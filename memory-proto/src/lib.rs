@@ -1,4 +1,5 @@
 pub mod db;
+pub mod dreamer;
 pub mod edges;
 pub mod extensions;
 pub mod message;

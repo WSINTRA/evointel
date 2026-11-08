@@ -26,11 +26,23 @@ pub struct DreamReport {
     pub finished_at: Option<DateTime<Utc>>,
     /// Notes pulled from the queue for this run.
     pub notes_in: usize,
+    /// Node writes the dreamer *executed* (idempotent `MERGE` targets),
+    /// whether or not they created anything new. A legitimate re-run
+    /// writes everything again and observes `nodes_added == 0` — that
+    /// must never be read as "extracted nothing".
+    pub nodes_written: usize,
+    /// New node keys observed vs the pre-dream snapshot (analytics).
     pub nodes_added: usize,
+    /// New edge triples + time rels observed vs the pre-dream snapshot.
     pub edges_added: usize,
     /// Errors encountered during the run (any one is a nightmare).
     pub errors: Vec<String>,
-    /// The message artifact passed its shelf check.
+    /// Whether this run produced a message artifact at all. Quiet days
+    /// (empty queue) write no sermon on purpose — silence is the correct
+    /// output when there is nothing new to say.
+    pub message_written: bool,
+    /// The message artifact passed its shelf check. Vacuously true on
+    /// quiet days (nothing was supposed to be produced).
     pub shelf_ok: bool,
     /// Structural similarity to the pre-dream graph, when a pre-dream
     /// snapshot was taken. `None` means "not measured" — which is not
@@ -45,8 +57,9 @@ pub struct DreamReport {
 ///   observation (ran);
 /// - **errors** — the write path hit something it couldn't handle;
 /// - **processed notes but extracted nothing** — `notes_in > 0` with
-///   `nodes_added == 0` means the dreamer consumed evidence and produced
-///   no model from it;
+///   `nodes_written == 0` means the dreamer consumed evidence and wrote
+///   no model at all (deliberately counted as *executed writes*, not new
+///   nodes, so an idempotent re-run is never mistaken for failure);
 /// - **failed shelf check** — no proven artifact;
 /// - **structural shock** — similarity to the previous graph cratered
 ///   below `similarity_floor`.
@@ -63,7 +76,7 @@ pub struct DreamReport {
 pub fn is_nightmare(report: &DreamReport, similarity_floor: f32) -> bool {
     report.finished_at.is_none()
         || !report.errors.is_empty()
-        || (report.notes_in > 0 && report.nodes_added == 0)
+        || (report.notes_in > 0 && report.nodes_written == 0)
         || !report.shelf_ok
         || report
             .similarity_to_prev

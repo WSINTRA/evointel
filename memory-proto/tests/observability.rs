@@ -13,9 +13,11 @@ fn good_report() -> DreamReport {
         started_at: ts(1_700_000_000),
         finished_at: Some(ts(1_700_000_900)),
         notes_in: 3,
+        nodes_written: 14,
         nodes_added: 12,
         edges_added: 5,
         errors: vec![],
+        message_written: true,
         shelf_ok: true,
         similarity_to_prev: Some(0.93),
     }
@@ -44,11 +46,38 @@ fn errors_make_a_nightmare() {
 }
 
 #[test]
-fn consuming_notes_without_extraction_is_a_nightmare() {
+fn consuming_notes_without_writing_is_a_nightmare() {
     let mut r = good_report();
     r.notes_in = 3;
-    r.nodes_added = 0;
+    r.nodes_written = 0;
     assert!(is_nightmare(&r, 0.5), "evidence in, no model out");
+}
+
+#[test]
+fn an_honest_rerun_is_not_a_nightmare() {
+    // Idempotent replay: every MERGE re-executes (nodes_written > 0) but
+    // observes nothing new (nodes_added == 0). This is the recovery
+    // path working, not a failure.
+    let mut r = good_report();
+    r.notes_in = 3;
+    r.nodes_written = 14;
+    r.nodes_added = 0;
+    r.edges_added = 0;
+    assert!(!is_nightmare(&r, 0.5));
+}
+
+#[test]
+fn a_quiet_day_is_not_a_nightmare() {
+    // Empty queue: no notes, nothing written, no sermon (silence is the
+    // correct output), shelf vacuously true.
+    let mut r = good_report();
+    r.notes_in = 0;
+    r.nodes_written = 0;
+    r.nodes_added = 0;
+    r.edges_added = 0;
+    r.message_written = false;
+    r.similarity_to_prev = Some(1.0);
+    assert!(!is_nightmare(&r, 0.5));
 }
 
 #[test]
