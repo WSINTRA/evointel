@@ -303,20 +303,21 @@ fn dream_run_lists(conn: &lbug::Connection, id: &str) -> (Vec<String>, Vec<Strin
     let result = conn
         .execute(&mut stmt, vec![("id", lbug::Value::String(id.to_string()))])
         .unwrap();
-    for row in result {
-        let to_ids = |v: &lbug::Value| match v {
-            lbug::Value::List(_, items) => items
-                .iter()
-                .filter_map(|i| match i {
-                    lbug::Value::String(s) => Some(s.clone()),
-                    _ => None,
-                })
-                .collect(),
-            _ => vec![],
-        };
-        return (to_ids(&row[0]), to_ids(&row[1]));
-    }
-    panic!("no dream run row {id}")
+    let row = result
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("no dream run row {id}"));
+    let to_ids = |v: &lbug::Value| match v {
+        lbug::Value::List(_, items) => items
+            .iter()
+            .filter_map(|i| match i {
+                lbug::Value::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => vec![],
+    };
+    (to_ids(&row[0]), to_ids(&row[1]))
 }
 
 #[test]
@@ -445,9 +446,8 @@ fn the_ledger_is_idempotent_across_re_dreams() {
     run_dream(&conn, &judge, &MechanicalSermon, &spec);
 
     let result = conn.query("MATCH (r:DreamRun) RETURN count(r);").unwrap();
-    for row in result {
-        assert_eq!(row[0], lbug::Value::Int64(1), "one row, converged");
-    }
+    let rows: Vec<lbug::Value> = result.into_iter().next().unwrap();
+    assert_eq!(rows[0], lbug::Value::Int64(1), "one row, converged");
     assert_eq!(dream_run_row(&conn, "run-again"), (0, 0, 1, 0, 0));
 }
 
@@ -467,11 +467,10 @@ fn a_quiet_day_writes_no_ledger_row() {
     );
 
     let result = conn.query("MATCH (r:DreamRun) RETURN count(r);").unwrap();
-    for row in result {
-        assert_eq!(
-            row[0],
-            lbug::Value::Int64(0),
-            "nothing considered, nothing owed"
-        );
-    }
+    let rows: Vec<lbug::Value> = result.into_iter().next().unwrap();
+    assert_eq!(
+        rows[0],
+        lbug::Value::Int64(0),
+        "nothing considered, nothing owed"
+    );
 }
