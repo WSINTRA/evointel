@@ -74,20 +74,130 @@ pub trait Judge {
 }
 
 /// The sermon's voice: turns the reflection's grounded material —
-/// anchor, insights, citations — into the body the reader meets.
+/// anchor, insights, citations, the self reading — into the body the
+/// reader meets.
 ///
 /// The facts are always the dreamer's own; the writer only speaks
-/// them. [`MechanicalSermon`] is the floor that cannot fail; the
-/// living voice is the LLM writer in `llm::LlmSermonWriter`. A writer
-/// that errors falls back to the floor, recorded, and the dream
-/// continues.
+/// them. [`MechanicalSermon`] is the floor that cannot fail; the living
+/// voice is the LLM writer in `llm::LlmSermonWriter`. A writer that
+/// errors falls back to the floor, recorded, and the dream continues.
 pub trait SermonWriter {
     fn compose(
         &self,
         anchor: &str,
         insights: &[Insight],
         citations: &[Citation],
+        self_reading: Option<&SelfReading>,
     ) -> Result<String, String>;
+}
+
+/// The self pass rendered for the voice: movement language only.
+/// Numbers belong to the ledger — and the strip happens here, at
+/// construction, not by prompt rule. No field ever attributes the
+/// user's movement to the system: observed, never caused.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelfReading {
+    /// "your attention moved toward thinking" — from the drift between
+    /// the two latest user states. `None` until a second window exists.
+    pub user_movement: Option<String>,
+    /// "the reading leaned thinking-ward" — the compensation, when it
+    /// engaged. `None` when it stayed silent.
+    pub wunicorm_lean: Option<String>,
+    /// "the feeling stance is holding very still" — rigidity above the
+    /// threshold, named by the stance's direction. `None` otherwise.
+    pub tension: Option<String>,
+}
+
+impl SelfReading {
+    /// The floor's one line — everything the reading dares to say.
+    pub fn summary(&self) -> String {
+        let parts: Vec<&str> = [
+            self.user_movement.as_deref(),
+            self.wunicorm_lean.as_deref(),
+            self.tension.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        parts.join("; ")
+    }
+}
+
+/// Renders the self pass for the voice — movement language, no numbers,
+/// no claimed effects.
+fn render_self_reading(pass: &SelfPassReport) -> SelfReading {
+    // Movement: the drift between the user's two latest states. Zero
+    // drift is honest stillness; a first window has nothing to compare
+    // and stays silent.
+    let user_movement = pass.drift.map(|(j, p)| {
+        let mut phrases: Vec<&str> = vec![];
+        if j.abs() > f32::EPSILON {
+            phrases.push(if j > 0.0 {
+                "toward thinking"
+            } else {
+                "toward feeling"
+            });
+        }
+        if p.abs() > f32::EPSILON {
+            phrases.push(if p > 0.0 {
+                "toward sensing"
+            } else {
+                "toward intuiting"
+            });
+        }
+        if phrases.is_empty() {
+            "your attention held still on both axes".to_string()
+        } else {
+            format!("your attention moved {}", phrases.join(" and "))
+        }
+    });
+
+    // The lean: compensation that engaged, named by its direction. The
+    // words only name the lean — never the cause, never the credit.
+    let wunicorm_lean = match pass.wunicorm_comp {
+        (j, p) if j.abs() > f32::EPSILON || p.abs() > f32::EPSILON => {
+            let mut phrases: Vec<&str> = vec![];
+            if j.abs() > f32::EPSILON {
+                phrases.push(if j > 0.0 {
+                    "thinking-ward"
+                } else {
+                    "feeling-ward"
+                });
+            }
+            if p.abs() > f32::EPSILON {
+                phrases.push(if p > 0.0 {
+                    "sensing-ward"
+                } else {
+                    "intuiting-ward"
+                });
+            }
+            Some(format!("the reading leaned {}", phrases.join(" and ")))
+        }
+        _ => None,
+    };
+
+    // Tension: a rigid stance, named by its direction.
+    let tension = pass
+        .user_position
+        .filter(|_| {
+            pass.rigidity.0 > crate::axes::RIGIDITY_THRESHOLD
+                || pass.rigidity.1 > crate::axes::RIGIDITY_THRESHOLD
+        })
+        .map(|(j, p)| {
+            if pass.rigidity.0 > crate::axes::RIGIDITY_THRESHOLD {
+                let stance = if j <= 0.0 { "feeling" } else { "thinking" };
+                format!("the {stance} stance is holding very still")
+            } else {
+                let stance = if p <= 0.0 { "intuiting" } else { "sensing" };
+                format!("the {stance} stance is holding very still")
+            }
+        });
+
+    SelfReading {
+        user_movement,
+        wunicorm_lean,
+        tension,
+    }
 }
 
 /// The guaranteed voice: mechanical, grounded, a log by design. It
@@ -101,10 +211,18 @@ impl SermonWriter for MechanicalSermon {
         anchor: &str,
         insights: &[Insight],
         _citations: &[Citation],
+        self_reading: Option<&SelfReading>,
     ) -> Result<String, String> {
         let mut body = format!("Morning — a dream pass over your notes.\n\nAround '{anchor}':\n");
         for i in insights {
             let _ = writeln!(body, "- {}", i.summary);
+        }
+        // The floor speaks what the dreamer measured, even when the
+        // living voice fails.
+        if let Some(reading) = self_reading
+            && !reading.summary().is_empty()
+        {
+            let _ = writeln!(body, "- the self: {}", reading.summary());
         }
         Ok(body)
     }
@@ -288,7 +406,7 @@ pub fn run_dream(
     let (message_written, shelf_ok) = if spec.queue.is_empty() {
         (false, true)
     } else {
-        reflect_and_speak(conn, sermon, spec, started_at, &mut errors)
+        reflect_and_speak(conn, sermon, spec, started_at, self_pass, &mut errors)
     };
 
     let mut report = DreamReport {
@@ -873,6 +991,7 @@ fn reflect_and_speak(
     sermon: &dyn SermonWriter,
     spec: &DreamSpec,
     now: DateTime<Utc>,
+    self_pass: Option<SelfPassReport>,
     errors: &mut Vec<String>,
 ) -> (bool, bool) {
     // Find the anchor concept by meaning.
@@ -952,14 +1071,17 @@ fn reflect_and_speak(
 
     // Assemble, write, prove. The prose is the writer's; the
     // citations are always mechanical — grounding is never delegated.
-    let prose = match sermon.compose(&anchor_name, &insights, &citations) {
+    // The self reading reaches the voice as movement language only —
+    // rendered here, numbers never handed over.
+    let self_reading = self_pass.as_ref().map(render_self_reading);
+    let prose = match sermon.compose(&anchor_name, &insights, &citations, self_reading.as_ref()) {
         Ok(p) => p,
         Err(e) => {
             errors.push(format!(
                 "sermon writer failed, fell back to mechanical prose: {e}"
             ));
             MechanicalSermon
-                .compose(&anchor_name, &insights, &citations)
+                .compose(&anchor_name, &insights, &citations, self_reading.as_ref())
                 .unwrap_or_default()
         }
     };

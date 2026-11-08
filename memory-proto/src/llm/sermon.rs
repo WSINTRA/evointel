@@ -7,7 +7,7 @@
 //! what the material says, and the citations block that follows the
 //! prose is rendered mechanically by the dreamer, never by the model.
 
-use crate::dreamer::SermonWriter;
+use crate::dreamer::{SelfReading, SermonWriter};
 use crate::llm::{ChatMessage, LlmClient, load_prompt, redact};
 use crate::message::{Citation, Insight};
 
@@ -31,8 +31,19 @@ impl SermonWriter for LlmSermonWriter {
         anchor: &str,
         insights: &[Insight],
         citations: &[Citation],
+        self_reading: Option<&SelfReading>,
     ) -> Result<String, String> {
         let system = load_prompt("sermon-v1.md").map_err(|e| e.to_string())?;
+        // The self block is movement language only — the dreamer
+        // stripped the numbers at construction; nothing numeric is ever
+        // handed to the voice.
+        let self_block = self_reading.map(|r| {
+            serde_json::json!({
+                "movement": r.user_movement.as_deref().map(redact),
+                "lean": r.wunicorm_lean.as_deref().map(redact),
+                "tension": r.tension.as_deref().map(redact),
+            })
+        });
         let material = serde_json::json!({
             "anchor": redact(anchor),
             "facts": insights.iter().map(|i| redact(&i.summary)).collect::<Vec<_>>(),
@@ -45,6 +56,7 @@ impl SermonWriter for LlmSermonWriter {
                     })
                 })
                 .collect::<Vec<_>>(),
+            "self": self_block,
         });
         let messages = vec![
             ChatMessage::system(&system),

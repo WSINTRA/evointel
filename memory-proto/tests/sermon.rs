@@ -70,7 +70,7 @@ fn llm_writer_carries_the_material_and_returns_prose() {
     let writer = LlmSermonWriter::new(Box::new(recorded.clone()));
 
     let body = writer
-        .compose("job search", &sample_insights(), &sample_citations())
+        .compose("job search", &sample_insights(), &sample_citations(), None)
         .unwrap();
     assert_eq!(body, PROSE, "prose passes through, trimmed");
 
@@ -96,7 +96,7 @@ fn llm_writer_rejects_empty_prose() {
     let writer = LlmSermonWriter::new(Box::new(recorded));
 
     let err = writer
-        .compose("job search", &sample_insights(), &sample_citations())
+        .compose("job search", &sample_insights(), &sample_citations(), None)
         .unwrap_err();
     assert!(err.contains("empty prose"), "{err}");
 }
@@ -104,7 +104,7 @@ fn llm_writer_rejects_empty_prose() {
 #[test]
 fn mechanical_sermon_is_the_floor() {
     let body = MechanicalSermon
-        .compose("job search", &sample_insights(), &sample_citations())
+        .compose("job search", &sample_insights(), &sample_citations(), None)
         .unwrap();
     assert!(body.starts_with("Morning — a dream pass over your notes."));
     assert!(body.contains("Around 'job search':"));
@@ -224,4 +224,80 @@ fn sermon_failure_falls_back_to_the_floor() {
         "the floor speaks when the voice cannot: {body}"
     );
     assert!(body.contains("[n-1]"), "grounding survives the fallback");
+}
+
+// ─── The sermon speaks from the self ─────────────────────────────────
+
+fn sample_self_reading() -> memory_proto::dreamer::SelfReading {
+    memory_proto::dreamer::SelfReading {
+        user_movement: Some("your attention moved toward thinking".to_string()),
+        wunicorm_lean: Some("the reading leaned feeling-ward".to_string()),
+        tension: None,
+    }
+}
+
+#[test]
+fn the_writer_receives_the_self_block_without_numbers() {
+    let recorded = RecordedClient::new();
+    recorded.push_chat(Ok(PROSE.to_string()));
+    let writer = LlmSermonWriter::new(Box::new(recorded.clone()));
+    let reading = sample_self_reading();
+
+    writer
+        .compose(
+            "job search",
+            &sample_insights(),
+            &sample_citations(),
+            Some(&reading),
+        )
+        .unwrap();
+
+    let calls = recorded.chat_calls();
+    assert_eq!(calls.len(), 1);
+    let material = &calls[0].0[1].content;
+    // The self block traveled — movement language, tension, lean.
+    assert!(material.contains("self"), "the block is named: {material}");
+    assert!(
+        material.contains("your attention moved toward thinking"),
+        "{material}"
+    );
+    assert!(
+        material.contains("the reading leaned feeling-ward"),
+        "{material}"
+    );
+    // The strip is enforced at construction, then tested: the self
+    // block carries no digits.
+    let self_json = material
+        .split("\"self\":")
+        .nth(1)
+        .expect("a self block exists");
+    let self_json = self_json.split('}').next().unwrap_or(self_json);
+    assert!(
+        !self_json.chars().any(char::is_numeric),
+        "numbers belong to the ledger, not the voice: {self_json}"
+    );
+}
+
+#[test]
+fn the_floor_speaks_the_self_when_the_voice_fails() {
+    let reading = sample_self_reading();
+    let body = MechanicalSermon
+        .compose(
+            "job search",
+            &sample_insights(),
+            &sample_citations(),
+            Some(&reading),
+        )
+        .unwrap();
+    assert!(
+        body.contains("- the self: your attention moved toward thinking"),
+        "the floor speaks what the dreamer measured: {body}"
+    );
+    assert!(body.contains("the reading leaned feeling-ward"), "{body}");
+
+    // And stays silent when there is nothing to say.
+    let bare = MechanicalSermon
+        .compose("job search", &sample_insights(), &sample_citations(), None)
+        .unwrap();
+    assert!(!bare.contains("the self:"), "{bare}");
 }
