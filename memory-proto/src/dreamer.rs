@@ -20,14 +20,16 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use lbug::{Connection, Value};
 
+use crate::axes::Function;
 use crate::db::DbResult;
 use crate::edges::{Contains, HasProperty, LeadsTo, Similar};
 use crate::message::{Citation, Insight, Message, MessageKind, shelf_check, write_message};
 use crate::mutations::{
-    NodeRef, insert_entity, insert_event, insert_fact, insert_memory, insert_note, insert_time,
-    link_contains, link_has_property, link_leads_to, link_similar, wire_time_hierarchy,
+    NodeRef, insert_dream_run, insert_entity, insert_event, insert_fact, insert_memory,
+    insert_note, insert_time, link_contains, link_has_property, link_leads_to, link_similar,
+    wire_time_hierarchy,
 };
-use crate::nodes::{Entity, Event, Fact, Memory, Note, Time};
+use crate::nodes::{DreamRun, Entity, Event, Fact, Memory, Note, Time};
 use crate::observability::{DreamReport, append_dream_report};
 use crate::queries::{
     concept_drift, connected_notes, events_in_range, get_entity, graph_snapshot,
@@ -186,6 +188,11 @@ pub fn run_dream(
     };
 
     // ── Judge & write: every note through the LLM seam, then MERGE ──
+    // The choice ledger tallies as the loop runs: what was considered,
+    // what was kept (per function), what was judged and dropped whole.
+    let mut considered: Vec<String> = vec![];
+    let mut dropped: Vec<String> = vec![];
+    let mut kept = [0i64; 4]; // [thinking, feeling, sensing, intuiting]
     for note in &spec.queue {
         let judgment = match judge.judge(conn, note) {
             Ok(j) => j,
@@ -199,6 +206,15 @@ pub fn run_dream(
             continue;
         }
         nodes_written += 1;
+        considered.push(note.id.clone());
+        if judgment.memories.is_empty() {
+            dropped.push(note.id.clone());
+        }
+        for m in &judgment.memories {
+            if let Some(tag) = m.function_tag.as_deref().and_then(Function::parse) {
+                kept[kept_index(tag)] += 1;
+            }
+        }
         apply_judgment(
             conn,
             &judgment,
@@ -206,6 +222,35 @@ pub fn run_dream(
             &mut nodes_written,
             &mut errors,
         );
+    }
+
+    // ── The choice ledger: what this run kept and what it let go ──
+    // One idempotent row per non-quiet run. The discarded is data —
+    // Wunicorm's position is measured from these choices, and drops
+    // dilute its confidence rather than pushing its position.
+    if !considered.is_empty() {
+        let now = Utc::now();
+        let run = DreamRun {
+            id: spec.run_id.clone(),
+            considered: considered.clone(),
+            dropped: dropped.clone(),
+            kept_t: kept[0],
+            kept_f: kept[1],
+            kept_s: kept[2],
+            kept_n: kept[3],
+            // Per-run note counts stay far below 2^63.
+            #[allow(clippy::cast_possible_wrap)]
+            dropped_total: dropped.len() as i64,
+            started_at,
+            finished_at: now,
+            created_at: now,
+            updated_at: now,
+            layer: 3,
+            context: "dream".to_string(),
+        };
+        if let Err(e) = insert_dream_run(conn, &run) {
+            errors.push(format!("dream run ledger write failed: {e}"));
+        }
     }
 
     // ── Observe: the delta, honestly counted ──
@@ -256,6 +301,17 @@ pub fn run_dream(
     }
 
     report
+}
+
+/// The choice-ledger column index for a function:
+/// `[thinking, feeling, sensing, intuiting]`.
+fn kept_index(f: Function) -> usize {
+    match f {
+        Function::Thinking => 0,
+        Function::Feeling => 1,
+        Function::Sensing => 2,
+        Function::Intuiting => 3,
+    }
 }
 
 /// Applies one judgment's writes. Every write is idempotent; every
