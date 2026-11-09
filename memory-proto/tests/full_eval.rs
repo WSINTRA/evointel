@@ -417,7 +417,7 @@ fn full_cycle_delivers_the_job_search_story() {
     let msg: Message = serde_json::from_str(&std::fs::read_to_string(&artifact).unwrap()).unwrap();
     assert_eq!(msg.kind, MessageKind::Sermon);
 
-    // Every citation resolves to a real note, and the snippet is that
+    // Every citation resolves to a real note, and its content is that
     // note's actual content — evidence, not vibes.
     let cited: BTreeSet<String> = msg.citations.iter().map(|c| c.note_id.clone()).collect();
     assert_eq!(
@@ -431,7 +431,7 @@ fn full_cycle_delivers_the_job_search_story() {
         let n = get_note(&conn, &c.note_id)
             .unwrap()
             .unwrap_or_else(|| panic!("citation {} must resolve to a real note", c.note_id));
-        assert_eq!(n.content, c.snippet);
+        assert_eq!(n.content, c.content);
     }
 
     // The headline insight: anxious → strategic, with drift evidence.

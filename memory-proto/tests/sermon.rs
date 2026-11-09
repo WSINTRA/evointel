@@ -56,7 +56,7 @@ fn sample_insights() -> Vec<Insight> {
 fn sample_citations() -> Vec<Citation> {
     vec![Citation {
         note_id: "n-1".to_string(),
-        snippet: "I am anxious about my job search.".to_string(),
+        content: "I am anxious about my job search.".to_string(),
     }]
 }
 
@@ -369,4 +369,57 @@ fn delivery_failure_lands_in_the_ledger_as_a_fault() {
     let written: DreamReport = serde_json::from_str(line.trim()).unwrap();
     assert!(!written.note_delivered);
     assert!(written.errors.iter().any(|e| e.contains("delivery")));
+}
+
+/// The first live sermon was written from an 80-character slice of a
+/// note whose actual question lay beyond the cut. Nothing truncates
+/// anymore: the voice and the artifact both carry the whole note.
+#[test]
+fn the_material_and_the_footer_carry_the_whole_note() {
+    // The real p76 note: its question crosses the old 80-char cut.
+    let whole = "What limitations if any have you ran into with Rails \
+        and in particular Active Record for complex queries, and how \
+        have you solved them?";
+    assert!(whole.chars().count() > 80);
+
+    let dir = tempfile::tempdir().unwrap();
+    let db = open_test_db(&dir.path().join("t.db"));
+    let conn = db.connect().unwrap();
+    let outbox = dir.path().join("outbox");
+    let log = dir.path().join("dream-log.jsonl");
+
+    let judge_rec = RecordedClient::new();
+    judge_rec.push_chat(Ok(CANNED.to_string()));
+    judge_rec.push_embed(Ok(vec![one_hot(0)]));
+    let writer_rec = RecordedClient::new();
+    writer_rec.push_chat(Ok(PROSE.to_string()));
+    let judge = LlmJudge::new(Box::new(judge_rec));
+    let writer = LlmSermonWriter::new(Box::new(writer_rec.clone()));
+
+    let mut sp = spec((&outbox, &log));
+    sp.queue = vec![Note {
+        id: "n-1".to_string(),
+        content: whole.to_string(),
+        ..test_note()
+    }];
+    let report = run_dream(&conn, &judge, &writer, &NoDelivery, &sp);
+    assert!(report.errors.is_empty(), "errors: {:?}", report.errors);
+
+    // The voice received the full text, not a caption of it.
+    let calls = writer_rec.chat_calls();
+    assert!(
+        calls[0].0[1].content.contains("how have you solved them?"),
+        "the material must carry the text beyond the old cut"
+    );
+
+    // And so does the artifact's grounding block.
+    let msg: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(outbox.join("run-1-sermon.json")).unwrap())
+            .unwrap();
+    assert_eq!(msg["citations"][0]["content"].as_str().unwrap(), whole);
+    let body = msg["body"].as_str().expect("body");
+    assert!(
+        body.contains("how have you solved them?"),
+        "the footer cites the whole note: {body}"
+    );
 }

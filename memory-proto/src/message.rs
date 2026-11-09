@@ -41,11 +41,13 @@ impl MessageKind {
     }
 }
 
-/// A note the message is grounded in — evidence, not vibes.
+/// A note the message is grounded in — evidence, not vibes. The full
+/// text of the note: citations are never excerpts, so the message and
+/// the voice both stand on everything the user wrote.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Citation {
     pub note_id: String,
-    pub snippet: String,
+    pub content: String,
 }
 
 /// One finding the reflection is reporting.

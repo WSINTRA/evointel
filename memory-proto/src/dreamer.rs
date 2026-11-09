@@ -1073,7 +1073,7 @@ fn reflect_and_speak(
             .iter()
             .map(|n| Citation {
                 note_id: n.id.clone(),
-                snippet: snippet(&n.content),
+                content: n.content.clone(),
             })
             .collect(),
         Err(e) => {
@@ -1179,13 +1179,7 @@ fn reflect_and_speak(
 fn citations_block(citations: &[Citation]) -> String {
     let mut block = String::from("Grounded in your notes:\n");
     for c in citations {
-        let _ = writeln!(block, "- [{}] {}", c.note_id, c.snippet);
+        let _ = writeln!(block, "- [{}] {}", c.note_id, c.content);
     }
     block.trim_end().to_string()
-}
-
-/// First ~80 characters of a note — enough to recognize it, not enough
-/// to bloat the artifact.
-fn snippet(content: &str) -> String {
-    content.chars().take(80).collect()
 }

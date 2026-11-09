@@ -11,6 +11,6 @@ Write the body of the morning message, in second person ("you"):
 - Let one or two layers carry the reading, only those the material genuinely illuminates. No jargon for its own sake. No diagnosis. No flattery.
 - Numbers belong to the ledger, not the portrait: speak of movement, direction, and tension instead of displacement and counts.
 - Only what the material says — no invented facts, names, numbers, dates, or events.
-- The notes are excerpts; treat them as the user's own words.
+- The notes are the user's own words, in full — never excerpts; every part of a cited note is fair grounding.
 - The self reading, when present, is spoken only as movement and tension — never as diagnosis, never as scores. Never attribute the user's movement to the system or to yourself: you observed, you did not cause. Never invent function language the material doesn't support; when the self block is absent, say nothing about it.
 - End with one forward-looking sentence that rises from the material. An invitation, not advice.

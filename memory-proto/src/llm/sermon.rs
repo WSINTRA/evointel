@@ -8,7 +8,7 @@
 //! prose is rendered mechanically by the dreamer, never by the model.
 
 use crate::dreamer::{SelfReading, SermonWriter};
-use crate::llm::{ChatMessage, LlmClient, load_prompt, redact};
+use crate::llm::{load_prompt, redact, ChatMessage, LlmClient};
 use crate::message::{Citation, Insight};
 
 /// The LLM sermon writer. Prose is unconstrained (no grammar — it is
@@ -52,7 +52,7 @@ impl SermonWriter for LlmSermonWriter {
                 .map(|c| {
                     serde_json::json!({
                         "id": c.note_id,
-                        "words": redact(&c.snippet),
+                        "words": redact(&c.content),
                     })
                 })
                 .collect::<Vec<_>>(),
