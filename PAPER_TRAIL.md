@@ -95,4 +95,34 @@ Concrete decisions made during planning and development. Append-only — no entr
 - Move to Developer ID signing, notarization, and universal builds when distributing beyond the local machine.
 - Reintroduce a network security model only if a remote app or distributed service is ever built.
 
+**Supersession note (2026-11-09):** the first live scheduled dream ran (27 notes, sermon produced, shelf green) and exposed the output step's dishonesty — delivery to Mac Notes failed silently while the log claimed success. Delivery is now a seam inside the dream, read-back verified, per D-004. The "read from the outbox" shape described above is superseded by that seam.
+
+---
+
+## D-004: Everything the sermon touches is shelf-checked and whole
+
+**Date:** 2026-11-09
+
+**Decision:** Three laws, all born from the first live dream's audit: **(1)** delivery is part of the dream and is verified by read-back — `MessageDelivery` runs inside `run_dream` after the artifact shelf check, `DreamReport.note_delivered` records what the user actually received, and a failed delivery is a nightmare in the ledger; **(2)** nothing truncates — a `Citation` carries the note's full text (`Citation.snippet` renamed to `Citation.content`), the sermon writer receives the whole cited note, the grounding footer cites it, and the macOS notification carries the full body; **(3)** wrong-shaped edges are named before the database rejects them — `link_edge` validates endpoint labels against the poly-rel allowlists (`EdgeType::allowed_from_labels`/`allowed_to_labels`, guarded by a DDL-consistency test) and records an illegal-label fault, keeping the dangling-reference fence for what is right-shaped but absent.
+
+**Context:** The audit of `dream-20261109-032316` found: eleven ledger faults, half of them raw lbug binder dumps ("Query node a violates schema. Expected labels are Memory, Event, Fact") because existence was fenced but endpoint legality wasn't; a sermon note that never reached Mac Notes while the daemon printed unconditional success (the app-level `count of folders whose name is "X"` AppleScript throws -1728 on Notes, and daemon.rs discarded every result with `let _ =`); and the first sermon written from an 80-character slice of the user's note — the voice never saw the question its subject was asking ("in particular Active Record" lay beyond the cut). The model also reached for plan.md's category-hierarchy Contains ("a category holding more specific things") while the prototype schema forbids Entity as a contains source — the prompt now says so explicitly, and the hierarchy edge is a named future feature.
+
+**Reasoning:**
+- **A green return code never stands in for a result** — the shelf check's own doctrine, applied to the last unchecked step. Delivery reads back the folder, notification results are recorded, and the unconditional success log is gone.
+- **The voice sees the evidence.** No revision without observation means the observation reaches the reviser intact. No silent caps anywhere: if a note someday exceeds an LLM context or the ~64K AppleScript literal, the failure lands in `errors` like any other fault — measured, not hidden behind a limit nobody named.
+- **Name the deeper fault first.** An edge with both a hallucinated endpoint and an illegal label (phantoms are always Entity-labeled, so leads_to phantoms hit both) gets the structural diagnosis — the claim shape is wrong no matter whether the node exists. The consistency test between the Rust allowlists and the DDL is the guard that keeps the mirror honest when the next migration batch moves the schema.
+- **Prompts teach the grammar; the fence enforces it.** Last night proved prompt language alone doesn't bind a model; the fence turned five opaque binder dumps into named, countable faults, and the prompt's per-pillar endpoint lists give the model the grammar it was implicitly violating.
+
+**What stays:**
+- The dreamer-as-only-writer contract, idempotent MERGE writes, four pillars, function space, the dangling-ref fence, and the ledger as append-only truth.
+- Mac Notes as both the input surface and the sermon destination; `Wunicorm` excluded from ingress.
+
+**Revisit triggers:**
+- The entity→entity Contains hierarchy (plan.md's "category holding more specific things") needs a migration batch plus traversal updates — build it when hierarchy queries earn it.
+- If phantom-endpoint dangling faults persist after the prompt tightening, consider resolving edge endpoints by semantic search against existing nodes instead of slugs.
+- If a long note ever breaks the context window or the AppleScript literal limit, revisit with a measured, *declared* bound — never a silent cut.
+
+**Files affected:** `memory-proto/src/output.rs` (account-scoped scripts, `resolve_notes_account`, `note_present`), `src/dreamer.rs` (`MessageDelivery`, `link_edge` fence, full-text citations), `src/edges.rs` (allowlists + `from_label`), `src/message.rs` (`Citation.content`), `src/observability.rs` (`note_delivered`), `src/daemon.rs` (`NotesDelivery`, `config.notes_account`), `src/llm/sermon.rs`, `prompts/extract-v1.md`, `prompts/sermon-v1.md`, `tests/schema_consistency.rs`, `tests/sermon.rs`, `tests/dreamer.rs`, `tests/llm_judge.rs`, `tests/full_eval.rs`, `tests/observability.rs`.
+
+
 **Files affected:** `memory-proto/src/{main,daemon,config,ingest,scheduler,output,tray}.rs`, `memory-proto/examples/demo.rs`, `memory-proto/assets/`, `memory-proto/packaging/macos/`, `memory-proto/scripts/package-macos.sh`, `memory-proto/Cargo.{toml,lock}`, `memory-proto/{README,AGILE}.md`, `README.md`, `plan.md`, `index.html`, `PAPER_TRAIL.md`
