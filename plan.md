@@ -2,10 +2,10 @@
 
 > **A notes and planner that uses evolving intelligence to augment daily life and work.**
 
-- **Status:** draft · working document
-- **Date:** October 2026
-- **Companions in this directory:** `index.html` (the visual version) · the full session export
-- **Scope:** overview and architecture. Deliberately **not** a tech-stack spec.
+- **Status:** v1 daemon implemented · live scheduled-dream verification pending
+- **Date:** November 2026
+- **Companions in this directory:** `index.html` (the visual version)
+- **Scope:** architecture, current implementation boundaries, and open threads — not a full API specification.
 
 ---
 
@@ -15,7 +15,7 @@
 - **v2** points that same engine at *you*: your notes become the input, the model being built is a model of your life, and the output is **augmentation** — not a chat, not a self-portrait.
 - The engine stays. The **subject** of the engine changes.
 
-The through-line of v1 that must survive: **the ability to add new tasks is a first-class feature**, not an accident. The notes pivot must not consume it. Tasks in v2 are still declared units of work that produce an artifact and are proven to have run — but the intelligence can now also *propose* them, derived from your notes, and you confirm them.
+The through-line of v1 that must survive: **the ability to add new tasks is a first-class feature**, not an accident. The notes pivot must not consume it. Task proposals and the general task engine are deferred, but they remain part of the target design: declared units of work that produce an artifact and are proven to have run, with a human confirming what the intelligence may do.
 
 ---
 
@@ -40,103 +40,122 @@ The through-line of v1 that must survive: **the ability to add new tasks is a fi
 
 ## 1. North star — what we keep
 
-v1 earned trust through properties that are about *how* it runs, not *what* it talks about. v2 re-homes all of them inside the daemon. None are replaced.
+v1 earned trust through properties that are about *how* it runs, not *what* it talks about. v2 carries those properties forward inside the daemon. Some are implemented in the current memory pipeline; others remain requirements for the deferred agentic task layer.
 
-| Kept | What it is |
+| Kept | Current realization |
 |---|---|
-| **The task engine** | A task = a declared unit of work → an artifact it must produce → a **shelf check** that proves it actually ran. A green exit code never stands in for a result. |
-| **Two kinds of truth** | *Declaration* (what should happen) is stored apart from *observation* (what did). This split is what stopped the "stamped success while writing no file" failure. |
-| **Guards in code, not in a prompt** | Shelf check, freshness, outbound gate, fault ledger, redaction — enforced by code, never requested of the model. |
-| **Two channels, deliberately split** | The reflective **letter** (about itself, omits a stale artifact and says so) and the mechanical **attention card** (only when a human is needed). |
-| **The Jungian framework, as a lens** | Shadow, tensions, archetypes, the six evolution rules — repurposed to read *you*, not discarded. In v1 the SELF was a closed loop with no outside anchor; v2 makes **your notes the external evidence base**, so "no revision without observation" finally has real observations to draw on. |
+| **The shelf check** | Implemented. A sermon is accepted only when its artifact exists, is non-empty, belongs to the current run, and passes its assertions. |
+| **Two kinds of truth** | Implemented. Scheduling and declarations stay apart from the `DreamReport`, the append-only dream log, and the observed graph delta. |
+| **Guards in code, not in a prompt** | Implemented for the shelf check, graph writes, freshness, and the self pass. The outbound gate and full task guard library arrive with tasks. |
+| **Two channels, deliberately split** | A design invariant. The current daemon has reflective sermon output and mechanical notifications; a separate attention-card channel is not yet implemented. |
+| **The Jungian framework, as a lens** | Implemented as geometry in the graph. Your notes are the external evidence base the v1 closed SELF loop lacked. |
+| **Extensible tasks** | Deferred, not discarded. No CTA or general task-execution surface is exposed yet. |
 
 ---
 
 ## 2. The shape
 
-In the **Jellyfin** sense: it runs on your Mac, serves a web app on `localhost`, and is a **resident process** — not a script that fires and exits. Exposed to your own devices over **Tailscale**; never to the public internet.
+Wunicorm is a **local-only, single-user macOS daemon** with a menu-bar icon. It is a resident process, not a script that fires and exits. Mac Notes is the input surface and the place where the sermon is returned.
 
 ```
-[ Mac menu-bar icon ]  --launch / config-->  [ localhost web app in the browser ]
-[ Tailscale ]  --------------------------------->  [ your other devices, on a private mesh ]
+[ Mac Notes app ]  <---- you write, as usual
+       |
+       |  osascript, on schedule
+       v
+[ Wunicorm daemon ]  ---- menu-bar icon: idle / dreaming / notification
+       |
+       +--> [ LadybugDB memory graph + Dreamer ]
+       |
+       +--> [ macOS notification ]
+       +--> [ sermon in the Wunicorm Notes folder ]
 ```
 
-- The **Mac app** is a thin shell over the localhost web UI; the note-taking UX is built as a **web app** for fast iteration. The tray icon is the daemon's face (status, config, launch).
-- **Config lives in the app**, not in files edited by hand.
-- The **daemon is the app's heart**: it owns the schedule and runs the intelligence in the background.
-- Tailscale is for *you to reach the app* from elsewhere — **access, not a third party processing your data.**
+- **No web app or localhost server.** The earlier browser/Tiptap/Tailscale design was abandoned.
+- **The tray is the only custom UI.** It shows daemon state, opens the Wunicorm Notes folder, and quits the app.
+- **Configuration is TOML**, created on first run under `~/Library/Application Support/memory-proto/`.
+- **The daemon owns the schedule.** Its default is one thorough dream per day at 22:00 local time.
+- **Distribution is a native app bundle and DMG.** The current build is ad-hoc signed for the build machine's architecture.
 
 ---
 
 ## 3. The notes app
 
-You have it open and you type into it the way you already do. It holds the heterogeneous, real stuff — todos, project notes, house tasks, thinking, poetry. **This is the new primary input for the intelligence.** You chose notes deliberately: it's always open, and what you type there is exactly what you later want refined (a job-search feed, a coding question, a company to research).
+You use **Mac Notes**, not a Wunicorm editor. It holds the heterogeneous, real stuff — todos, project notes, house tasks, thinking, poetry. This is the primary input for the intelligence because it is already open and what you type there is what you later want refined.
 
-**Layout**
-- **Side panel:** notes ordered by last-edited, grouped by **Month** — the familiar shape. Sort options deferred.
-- **Bodies:** Tiptap rich text (headings, lists, links, images, code).
-- **Storage:** a Notes DB (SQLite or Postgres — left open, see §11/§12).
+**Current ingress**
 
-**Features**
-- **Two note spaces** in one store — `source: user` and `source: wunicorm`. Your notes, and its notes-on-you (see §7).
-- **Task CTAs live on notes.** When wunicorm proposes a task derived from a note, a button appears on that note. You decide.
-- **In-app config surface** (see §5, the cross-cutting Config layer).
+- Reads every folder except `Wunicorm` and `Recently Deleted` through osascript.
+- Uses the note's Core Data URI as its stable identity.
+- Compares modification dates against persisted `last_seen` state to queue only new or changed notes.
+- Converts the Notes HTML body to plain text for the LLM.
+
+**Current output**
+
+- Creates the `Wunicorm` folder if needed.
+- Writes each produced sermon there as an HTML note.
+- Sends a macOS notification with a short preview.
+
+**Deferred**
+
+- Task CTAs and task confirmation.
+- Continuous or working-day ingestion.
+- Any custom note editor, sorting UI, helpdesk, or in-app configuration screen.
 
 ---
 
 ## 4. Security & privacy
 
-Single-user, local-first. Your Mac is the server. The security model relies on the OS, not on an app-level crypto layer.
+Single-user and local-first. The security model relies on the OS, not on an app-level crypto layer.
 
-- **At rest** — FileVault (full-disk encryption) protects the database file. The OS handles screen locks and session security.
-- **In transit** — Tailscale provides an encrypted private mesh between your devices. The app never exposes to the public internet.
-- **At the model** — redaction before any LLM call. Whatever is handed to a model is scrubbed of credentials and personal values, and you can see exactly what was hidden. (Especially relevant if a non-local LLM is configured.)
-- **No app-level encryption** — no client-side zero-knowledge, no password/seed/key-derivation. The daemon owns the data and processes it in plaintext. The threat model is "what if my Mac is stolen" — FileVault covers that.
+- **At rest** — FileVault protects the database and state files. macOS handles screen locks and session security.
+- **In transit** — there is no network app layer. No localhost API or Tailscale transport exists.
+- **Notes access** — macOS automation permission gates the osascript bridge to Notes.
+- **At the model** — the current target is local OpenAI-compatible LLM servers, so note content does not need to leave the machine. The redaction seam currently exists only as a stub; a real redactor is required before configuring a remote endpoint.
+- **No app-level encryption** — no client-side zero-knowledge, password, seed, or key derivation. The daemon processes plaintext so it can build the graph and insights.
 
-> **Revisit if the product grows.** If this becomes a distributed or cloud-hosted service, the trust model changes and encryption at the application layer becomes necessary. For a personal, single-user, Mac-first daemon — it is complexity without a matching threat.
+> **Revisit if the product grows.** A distributed or cloud-hosted service changes the trust model and requires application-layer transport and storage protections.
 
 ---
 
 ## 5. The architecture
 
-Your notes flow down a spine: stored, watched, structured into a graph, read for insight, and returned as augmentation. Three cross-cutting layers — **scheduling, config, security** — span the whole thing.
+On each scheduled run, notes move through ingress, the established memory pipeline, and the output layer. Configuration, scheduling, and observability span the flow.
 
 ```
-  NOTES APP          Mac tray -> localhost web app (Tiptap, month-grouped, CTAs)
-      |  writes
+  MAC NOTES         your folders, except Wunicorm + Recently Deleted
+      |  osascript
       v
-  NOTES DB           your notes  +  wunicorm's notes-on-you
-      |  watches continuously  +  full runs on schedule
+  INGRESS           Core Data IDs + modification-date change detection
+      |  new/changed Note values
       v
-  SORTER             one job: pull new/changed content, queue it for processing
-      |  hands off
+  SCHEDULER         daily dream time + once-per-day guard
+      |
       v
-  PROCESSING         an LLM judges & structures content into nodes + 4 pillar-edges,
-      |               placed in semantic space-time
+  PROCESSING        embeddings + LLM judge: nodes, facts, memories,
+      |             time, and four-pillar edges
       v
-  GRAPH DB           the Intelligence DB — the memory (semantic space-time, 4 pillars)
+  GRAPH DB          LadybugDB — semantic space-time memory
       |  read + analyze
       v
-  INSIGHT SERVICES   the daily sermon · reflections · task proposals · the passes
-      |  via the channels you chose
+  DREAMER           drift, events, choice ledger, self pass, reflection,
+      |             sermon, shelf check, DreamReport
       v
-  OUTPUTS            email · notification · in-app helpdesk · note CTA · attention card · visual
+  OUTPUTS           macOS notification + sermon in Wunicorm Notes folder
 
-  SCHEDULER  drives the sorter cadence, the full runs, and the insight services (working-day vs overnight)
-  CONFIG     in the app: AI backend (any OpenAPI) · cadence · output channels · visual toggle
-  SECURITY   FileVault at rest · Tailscale in transit · redaction before any LLM call
+  CONFIG            TOML + environment overrides for local LLM endpoints
+  TRAY              tao event loop; idle / dreaming / notification icons
+  STATE             last_seen + last_dream_date JSON, outside the graph
 ```
 
 **Layer notes**
 
-- **Notes App** — the input surface (§3).
-- **Notes DB** — the source of truth. Holds both note spaces.
-- **Sorter** — a constantly-running watcher. Its *one* job: pull new/changed content from the Notes DB and hand it to processing. It is cheap and continuous.
-- **Processing** — the LLM (LangGraph or similar) that makes the judgments: what the concepts are, which of the four pillars connect them, and where each sits in semantic space-time. This is where the OpenAPI-agnostic AI wrapper lives.
-- **Graph DB** — the Intelligence DB / the memory (§6).
-- **Insight services** — the "front" of the intelligence: they read notes + graph and produce the daily sermon, reflections, memories, and task proposals (§8).
-- **Outputs** — the channels you configure.
-- **Scheduler / Config / Security** — cross-cutting; they are not a stage in the flow, they span it.
+- **Ingress** — the osascript bridge and change detector in `src/ingest.rs`.
+- **Scheduler/state** — the daily trigger and persisted JSON state in `src/scheduler.rs`.
+- **Processing and Dreamer** — the existing judge, write path, reflection, self pass, and sermon pipeline.
+- **Graph DB** — LadybugDB (`lbug`), not SQLite/Postgres or a separate notes store.
+- **Outputs** — `src/output.rs`; the Dreamer writes an outbox artifact, and the daemon delivers it.
+- **Tray** — `src/tray.rs`, using a real `tao` main-thread event loop.
+- **Daemon** — `src/daemon.rs` coordinates the worker loop; errors are logged and the loop continues.
 
 ---
 
@@ -153,22 +172,18 @@ The graph is **not a keyword index**. Each concept sits at a point in a combined
 | **Contains** | hierarchical | a category holding more specific things |
 | **Expresses property** | attributive | a concept carrying a value (salary, status, date) |
 
-> "Casual" in the original notes is read as **causal**. Correct here if that's not the intent.
-
-**How it works:** the processing layer reads the notes and makes these judgments — deciding the nodes, the pillar-edges, and each node's position in semantic space-time. Nodes carry an origin marker: *in your notes* vs *inferred by wunicorm*.
-
-> **This is the v1 representation.** Deeper concepts on the semantic space-time model are coming (position, embedding, time, and how drift is measured) — the graph section should be revisited when they land.
+The processing layer reads the notes and makes these judgments — deciding the nodes, the pillar-edges, and each node's position in semantic space-time. Nodes carry an origin marker: *in your notes* vs *inferred by wunicorm*.
 
 ### The function space (landed — memory-proto, Tasks 20-31)
 
-The Jungian functions are now **geometry in the graph itself**, not just prompt language. Two bipolar axes — judgment (thinking ↔ feeling) and perception (sensing ↔ intuiting) — built from contrastive anchor centroids seeded from a frozen, gate-verified exemplar corpus (`prompts/anchors-v1.md`, embedded and versioned as `FunctionAnchor` rows; re-seeding deactivates, never deletes). Every note projects to a signed 2-dim coordinate — the corpus-mean centering (anisotropy removal) is part of the method, verified by a live separability gate before anything downstream trusted it.
+The Jungian functions are **geometry in the graph itself**, not just prompt language. Two bipolar axes — judgment (thinking ↔ feeling) and perception (sensing ↔ intuiting) — are built from contrastive anchor centroids seeded from a frozen, gate-verified exemplar corpus (`prompts/anchors-v1.md`, embedded and versioned as `FunctionAnchor` rows; re-seeding deactivates, never deletes). Every note projects to a signed 2-dim coordinate. Corpus-mean centering removes anisotropy and is verified by a live separability gate.
 
 **Two points, one frame:**
 
 - **U — the user's psyche.** The windowed centroid of note coordinates. Read, never steered, never claimed.
-- **W — Wunicorm's voice.** The position implied by its *choices*: what it kept, dropped, and emphasized, tagged by function. A damped **core** (hysteresis — personality, not mood; months, not windows) plus a fast **compensation** component gated by U's **rigidity** (straightness of trajectory over ≥3 windows — stuckness, never direction). When U is balanced, W simply accompanies; a healthy user gets a companion, a stuck one a counterweight.
+- **W — Wunicorm's voice.** The position implied by its *choices*: what it kept, dropped, and emphasized, tagged by function. A damped **core** (hysteresis — personality, not mood) plus a fast **compensation** component gated by U's **rigidity** (straightness of trajectory over ≥3 windows — stuckness, never direction). When U is balanced, W accompanies; a stuck user gets a counterweight.
 
-The dream cycle gained a deterministic **self pass** between writing judgments and reflection: it measures the notes onto the axes, writes both `SelfState`s, wires `SELF_TRAJECTORY`, and grounds every positional claim in its evidence notes and kept memories via `Grounds` edges — derived, never authoritative, rebuildable from the recorded choices. The sermon speaks from the self reading in **movement language only** ("toward thinking, away from feeling"); numbers are stripped at material construction, never entrusted to the prompt, and the user's movement is never attributed to the system.
+The dream cycle includes a deterministic **self pass** between writing judgments and reflection: it measures notes onto the axes, writes both `SelfState`s, wires `SELF_TRAJECTORY`, and grounds positional claims in evidence notes and kept memories via `Grounds` edges. The sermon speaks from the self reading in **movement language only**; numbers are stripped at material construction, and the user's movement is never attributed to the system.
 
 The standing guards: rigidity-not-direction · damped prescription · the auditor is audited · no claimed effects · the discarded is data (the `DreamRun` choice ledger) · no revision without observation. Full record: `PAPER_TRAIL.md` D-002.
 
@@ -176,138 +191,134 @@ The standing guards: rigidity-not-direction · damped prescription · the audito
 
 ## 7. The two note spaces
 
-There are two note spaces in one store. You write the first; the intelligence writes the second. **The model of you is inspectable** — you can read what it has learned about you.
+The two-space concept now lives directly in Mac Notes rather than in a custom `source:*` database.
 
-- **Your notes** (`source: user`) — the input; the living stream you type.
-- **Wunicorm's notes-on-you** (`source: wunicorm`) — the model; inferred, evolving, inspectable. ("What I noticed: your job search is shifting from anxious to strategic." "Habit: you plan house tasks on Sunday evenings.")
+- **Your folders** — the input; the living stream you type. Every folder except the two exclusions is eligible for ingress.
+- **The `Wunicorm` folder** — the output; sermons and reflections written back for inspection. It is excluded from ingress so the daemon does not ingest its own writing.
 
-The daemon is simply **another writer** to the same store — the ports/adapters data layer makes adding that actor mechanical. No hidden backchannel; the model is yours to read and correct.
+The daemon is another writer to the same application, not a hidden backchannel. The model remains yours to read and correct. Richer inferred notes-on-you beyond the current sermon remain part of the target design.
 
 ---
 
 ## 8. The augmentation loop
 
-Wunicorm does **not** wait to be asked. It runs its passes and reaches out — a daily **sermon** on your notes (v1's Persona, aimed at you, sprinkled with the Jungian lens), a notification, or a suggestion. It is a relationship with a cadence, not a Q&A box.
+Wunicorm does **not** wait to be asked. It runs on its schedule and reaches out — a daily **sermon** on your notes, a notification, and a visible tray state. It is a relationship with a cadence, not a Q&A box.
 
-**The clearest expression of "evolving intelligence augmenting daily work"** — it reads a note and offers to do the next thing:
+**Current loop**
 
-1. **You write a note** — five companies, links to their sites.
-2. **Sorter detects** the change; it is queued.
-3. **Graph structures it** — concepts + the four pillars.
-4. **Insight pass** reads it overnight.
-5. **Morning:** "Want me to research these 5?"
-6. **The note shows a CTA** — you tap it; the task runs through the durable engine and the shelf check proves it.
+1. **You write or edit a Mac Note.**
+2. **At dream time**, ingress detects the new/changed modification date and queues it.
+3. **The Dreamer** embeds and judges the note, writes the graph, reflects, and performs the self pass.
+4. **The shelf check** verifies that a real sermon artifact exists.
+5. **The daemon** sends a notification and writes the sermon into the `Wunicorm` folder.
+6. **The tray** reports dreaming and then notification/idle state.
 
-**Output channels (your choice, configurable):**
-- **The sermon** — the daily address on your own notes. Reflective, pointed, sometimes affirming, sometimes a light scolding. The letter channel, about itself.
-- **A notification** — "Wunicorm has some thoughts on the matter."
-- **In-app helpdesk** — one optional channel at the bottom of the notes app (this is the only place chat-like interaction lives; it is not the primary mode).
-- **The attention card** — mechanical, sent only when something needs a human (open faults, blocked sends, failed tasks). No model writes it.
-- **Optional daily visual** — generated from the reflections, on a toggle.
+**Target extension — tasks, not yet implemented**
+
+A note containing five companies could produce “Want me to research these 5?” A future confirmation surface would run that work through the durable task engine and prove the artifact with a shelf check. There is currently no CTA, task proposal, or task execution.
 
 ---
 
 ## 9. The durable core, re-homed
 
-v2 is agentic — it proposes and runs tasks, sends, generates. The trust does not come from it being *unable* to act; it comes from its acting being **fenced by code**. The v1 guard library moves inside the daemon and keeps its job unchanged.
+The trust model is still that action is **fenced by code**. The current daemon is not generally agentic, so the task-specific guards are requirements for the next layer rather than claims about the present app.
 
-| Guard | What it enforces |
+| Guard | Current status |
 |---|---|
-| **Shelf check** | A task is a failure unless its artifact exists, is non-empty, was written by this run, and passes its assertions. A green exit code never stands in for a result. |
-| **Two kinds of truth** | Declaration is stored apart from observation. |
-| **Outbound gate** | Nothing sent to a recipient not on the allowlist; no body containing a credential; one send per (task, date). |
-| **Fault ledger** | A known fault is closed by a fix, not by prose; a fault is not re-described past its mention budget. |
-| **Redaction** | Credential and personal values never reach the log or the model. |
-| **Two channels** | The letter and the attention card are different channels — v1's 2026 failure was one channel carrying the other's news. |
+| **Shelf check** | Implemented for the message artifact. |
+| **Two kinds of truth** | Implemented through `DreamReport`, the dream log, and pre/post graph observation. |
+| **Outbound gate** | Deferred with tasks and external sends. Current outputs are local notifications and Notes writes. |
+| **Fault ledger** | The dream log and nightmare detector exist; the complete v1 task-fault workflow is not yet re-homed. |
+| **Redaction** | Stub only. Mandatory before any remote LLM endpoint. |
+| **Two channels** | Sermon and mechanical notification exist; a separate attention-card implementation is deferred. |
 
 ---
 
 ## 10. The pipeline's rhythm
 
-A continuous sorter watching every keystroke is cheap; running the LLM on every keystroke is not. So the two are **split**: the **sorter detects and queues** continuously, and the **scheduler** triggers **processing** at intervals. That single split makes "always watching" and "an overnight full run" one coherent flow.
+The implemented cadence is deliberately simple: **one scheduled, thorough pass per day**.
 
 ```
-[ Watch — continuous ]  -->  [ Queue ]  -->  [ Process — scheduled, LLM ]
+[ Sleep / tick every 30s ] --> [ Is it dream time, and not dreamed today? ]
+                                      |
+                                      v
+                         [ Pull → detect changes → dream ]
 ```
 
-**Two cadences, one graph:**
+- **Default:** 22:00 local time, configurable in TOML.
+- **Once-per-day guard:** `last_dream_date` prevents repeated dreams on the same date.
+- **Quiet day:** no changed notes means no LLM dream and no sermon.
+- **State updates:** `last_seen` and `last_dream_date` persist after the run.
+- **Working-day/continuous passes:** future work. The current daemon does not watch keystrokes.
 
-- **Working-day** — light, frequent. A quick pass over recent notes; not the full treatment, just enough to keep the model current through the day.
-- **Overnight dreamer** — thorough, nightly. The deep pass: full reflection, memories, the Jungian lens, and the material for the morning's sermon.
-
-Both write to the **same Graph DB** — they are the same pipeline at different depth, not two systems.
-
-> **The graph is derived, so it is rebuildable.** It is computed from the notes, not the source of truth. If it ever goes wrong, a full re-run regenerates it — the v1 "no stale artifact" principle, re-homed in the memory layer.
+> **The graph is derived, so it is rebuildable.** It is computed from notes, not the source of truth. A full re-run can regenerate it; state and dream reports remain outside the graph.
 
 ---
 
 ## 11. Foundation & stack
 
-The notes app grows out of **`tees_valley_digital`** — a small, clean full-stack app (Bun + TanStack Start + Mantine + Tiptap + Drizzle). Notes and blog posts are close enough cousins that the shell, auth, editor and data pattern carry over.
+The app is built directly in Rust around the proven memory layer. The earlier plan to fork `tees_valley_digital` and reuse a web stack was discarded.
 
-**The honest effort split:**
+| Area | Current implementation |
+|---|---|
+| Language/process | One Rust process; daemon worker thread + main-thread macOS UI |
+| Notes bridge | `osascript` via `std::process::Command` |
+| Graph/memory | LadybugDB (`lbug`) with Cypher and HNSW vector indexes |
+| LLM | OpenAI-compatible synchronous client (`ureq`), local chat + embedding servers |
+| Scheduling/state | `chrono`, TOML config, JSON state |
+| Tray | `tray-icon` + `tao` event loop; Accessory activation policy |
+| Packaging | `Wunicorm.app`, `Info.plist`, `LSUIElement=true`, generated icons |
+| DMG | `hdiutil`, current architecture, ad-hoc `codesign` |
+| Native dependencies | OpenSSL dylibs vendored into the app and rewritten to `@rpath`; license included |
+| Testing | Hermetic Rust suites plus opt-in live LLM probes |
 
-| Reuse | Refactor / strip | Net-new |
-|---|---|---|
-| App shell + Mantine theme | Remove the public SSR surface, SEO, slug | The daemon API (bearer token + sync) |
-| Tiptap rich-text editor | Remove the publish workflow | The sorter / processing / graph layer |
-| List / detail views | Remove the auth/session layer (OS handles access) | The insight & sermon services |
-| Ports & adapters + DI data layer | Add the notes / todos / planner domain | The task engine (re-homed from v1) |
-| Ops: Docker, CI, error/security plumbing | Invert to private-by-default, localhost-only | |
-
-**The crux change:** the fork's auth is *server-side* (prove identity to the server). v2 is single-user and local-first — the OS handles access (FileVault, screen lock, Tailscale). The existing login/session machinery is **removed**, not inverted. The app assumes the operator is already authenticated to the machine.
-
-**Open tech choices (decide at build time):**
-- **Database** — SQLite (single-file, truly local-first) vs. Postgres (keep the fork as-is). Drizzle covers both.
-- **Processing framework** — "LangGraph or similar"; not pinned.
-- **Graph store** — open (embedded graph, or a graph store over the DB).
+The old SQLite-vs-Postgres and graph-store choices are resolved for this implementation: **Mac Notes for source content, LadybugDB for derived memory**.
 
 ---
 
 ## 12. What still folds
 
-This is a rough plan on purpose. The places where the architecture is still soft:
+The remaining work is now explicit rather than architectural guesswork:
 
-- **Database choice** *(stack)* — SQLite vs. Postgres. A portability call.
-- **The space-time model** *(graph)* — the deeper concepts behind semantic space-time. To come.
-- **"Overnight" = machine-on** *(honest limit)* — on a local daemon the thorough pass runs when the Mac is awake or idle. An accepted consequence of local-first + Mac-first; stated, not hidden.
-- **The daemon API surface** *(contract)* — bearer-token auth + sync endpoints: read notes, write notes, read notes-on-you, tag a CTA, propose / trigger tasks.
-- **How far a task may reach** *(trust)* — read-only research vs. something with side effects (a deploy). Confirmation per-task or per-capability, and how the user sets that boundary.
+- **Live daemon acceptance** *(verification)* — run a complete scheduled dream against real Mac Notes and the local LLM servers; verify ingestion, graph writes, notification, Notes output, quiet-day behavior, and next-day scheduling.
+- **“Overnight” = machine-on** *(honest limit)* — the thorough pass runs only while the Mac is awake. This is an accepted consequence of local-first design.
+- **Task CTAs and task reach** *(product + trust)* — how tasks are proposed and confirmed, and whether a capability is read-only research or has side effects.
+- **Launch at login** *(operations)* — deferred; the current DMG does not install a LaunchAgent.
+- **Distribution** *(packaging)* — Developer ID, notarization, and universal Intel/Apple Silicon builds are deferred.
+- **Remote-model safety** *(security)* — implement real redaction before any non-local LLM endpoint is allowed.
+- **Additional channels and cadences** *(design)* — attention cards, email, working-day ingestion, and richer notes-on-you.
 
 ---
 
 ## Appendix A — decisions log
 
-Decisions made during the planning session:
-
-| Decision | Choice | Rationale |
+| Decision | Current choice | Rationale |
 |---|---|---|
-| Input model | Notes app (web, browser) | Always open; what you type is what you later refine. |
-| SELF | Repurposed as a lens on *you*, not the bot's self-portrait | Your notes are the external anchor the v1 loop lacked. |
-| Output | Proactive augmentation (sermon / notification / CTA), not a primary chat | A cadence, not a Q&A box. Chat only as an optional in-app channel. |
-| Run model | Local-first daemon + localhost web app + Tailscale (Jellyfin-style) | Privacy; your machine is the server. |
-| AI backend | Configurable against any OpenAPI spec; own thin wrapper | Decouple the engine from any one model/CLI. |
-| Memory | Semantic space-time graph, 4 pillars, an agentic memory layer | Beyond append-only dated files. |
-| Cadence | Overnight dreamer (thorough) + working-day pass (light) | Configurable processing frequency. |
-| Security | OS-level only (FileVault, Tailscale, redaction) | Single-user local daemon; no app-level encryption needed. Revisit if distributed. |
-| Extensibility | Adding/proposing tasks stays first-class | The property that made v1 good software. |
-| Foundation | Fork `tees_valley_digital` | Reuse shell, auth, editor, data pattern; strip the blog/SEO layer. |
-| Document: database | **Left open** | Both presented; decide at build. |
-| Document: audience | **Dense working doc for the owner** | Carries the why, the stress-test, and open threads. |
-| Document: Elephas | **Omitted** | Referenced for insight only; not in the doc. |
+| Input model | **Mac Notes via osascript** | Already in daily use; no custom editor or notes DB required. |
+| Output | **Notification + sermon in the Wunicorm Notes folder + tray state** | Local, inspectable, proactive; no chat surface. |
+| Run model | **Local-only Rust daemon and menu-bar app** | Privacy and simplicity; no web app or Tailscale. |
+| SELF | Repurposed as a lens on *you* | Your notes are the external anchor the v1 loop lacked. |
+| AI backend | OpenAI-compatible local endpoints with env/TOML overrides | Decouple the engine from one model or CLI. |
+| Memory | LadybugDB semantic space-time graph, four pillars | Implemented and verified by the memory/full-eval suites. |
+| Cadence | **One configurable daily dream, default 22:00** | Simple v1 scheduling; continuous/working-day passes deferred. |
+| Security | OS-level local security; real redaction required before remote LLMs | Match the actual single-user threat model. |
+| Extensibility | Tasks remain first-class but are deferred | Avoid pretending the current daemon is agentic. |
+| Foundation | Rust + LadybugDB + osascript + tao | The working implementation, not a web-app fork. |
+| Packaging | Current-architecture app/DMG, vendored OpenSSL, ad-hoc signing | Reproducible local install without Apple Developer credentials. |
+| Verification | Components, tests, tray, and DMG accepted; full live scheduled dream pending | Keep the evidence boundary explicit. |
 
 ---
 
 ## Appendix B — glossary
 
-- **Sorter** — the continuous watcher that pulls new/changed content from the Notes DB and queues it for processing.
-- **Processing** — the LLM pass that structures content into graph nodes and the four pillar-edges, in semantic space-time.
-- **Graph DB / Intelligence DB** — the memory; a semantic space-time knowledge graph with four relationship pillars.
-- **Insight services** — the intelligence's front: daily sermon, reflections, memories, task proposals.
-- **Two note spaces** — `source: user` (your notes) and `source: wunicorm` (its notes-on-you).
-- **Sermon** — the daily reflective address on your notes; v1's Persona aimed at you, with the Jungian lens.
-- **Shelf check** — the guard that proves a task produced a real artifact before anything is filed or sent.
-- **Two kinds of truth** — declaration (what should happen) vs. observation (what did).
-- **Attention card** — the mechanical channel sent only when a human is needed.
-- **Semantic space-time** — a memory model where each concept has a position by meaning *and* time, so drift over time is visible.
+- **Ingress** — the scheduled osascript bridge that reads Mac Notes, detects new/changed notes, and builds the dream queue.
+- **Scheduler** — the daily dream-time check and once-per-day guard.
+- **Dreamer** — the memory pipeline: judge, idempotent graph writes, observation, reflection, self pass, sermon, and shelf check.
+- **Graph DB / Intelligence DB** — LadybugDB; the derived semantic space-time memory with four relationship pillars.
+- **Two note spaces** — your eligible Mac Notes folders and the excluded `Wunicorm` output folder.
+- **Sermon** — the daily reflective address on your notes, with the Jungian lens and movement language.
+- **Shelf check** — the guard that proves a real artifact exists before it is accepted or delivered.
+- **Two kinds of truth** — declaration (what should happen) vs observation (what did), represented by state/config versus reports and logs.
+- **Tray** — the menu-bar UI showing idle, dreaming, and notification states.
+- **Semantic space-time** — a memory model where each concept has a position by meaning *and* time, so drift is visible.
 - **Four pillars** — near/similar (proximity), leads to (causal), contains (hierarchical), expresses property (attributive).

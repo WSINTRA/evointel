@@ -286,7 +286,7 @@
   <div class="wrap tb-inner">
     <div class="tb-row1">
       <span class="brand">Wunicorm <span class="v">v2</span></span>
-      <span class="tb-tag">design overview · draft · oct 2026</span>
+      <span class="tb-tag">design + status · v1 daemon · nov 2026</span>
     </div>
     <nav class="tb-nav">
       <a href="#cover"><b>01</b>Cover</a>
@@ -322,137 +322,119 @@
       <span class="lg"><span class="dot i"></span> wunicorm's intelligence</span>
       <span class="lg"><span class="dot s"></span> the data stores</span>
     </div>
-    <p class="meta">working document · companion: <code class="c-i">plan.md</code> · full session export in this directory</p>
+    <p class="meta">working document · companion: <code class="c-i">plan.md</code> · current app status below</p>
+    <div class="callout" style="margin-top:22px; max-width:72ch;"><b>Implemented:</b> Rust Mac Notes daemon, daily scheduler, memory graph, sermon output, working tray, and a verified local DMG. <b>Verification boundary:</b> a complete live scheduled dream against real Mac Notes and the local LLM servers is still pending.</div>
   </section>
 
   <section class="sec" id="north">
     <p class="kicker"><span class="n">02</span> North star</p>
     <h2>What we keep — the durable core</h2>
-    <p class="lead">v1 earned trust through a set of properties that are about <em>how</em> it runs, not <em>what</em> it talks about. v2 re-homes all of them inside the daemon. None of them are replaced.</p>
+    <p class="lead">v1 earned trust through properties about <em>how</em> it runs. v2 carries them into the daemon. The shelf check, observation reports, and self pass are implemented; agentic task guards remain requirements for the next layer.</p>
     <div class="keep" style="margin-top:18px;">
-      <div class="k"><h4>The task engine</h4><p>A task is a declared unit of work → an artifact it must produce → a shelf check that proves it actually ran.</p></div>
+      <div class="k"><h4>The task engine · deferred</h4><p>A first-class target: declared work → an artifact → a shelf check. No CTA or general task execution is exposed yet.</p></div>
       <div class="k"><h4>Two kinds of truth</h4><p>Declaration (what should happen) stays separate from observation (what did).</p></div>
-      <div class="k"><h4>Guards in code, not in a prompt</h4><p>The shelf check, freshness, outbound gate, fault ledger and redaction are enforced by code, never requested of the model.</p></div>
-      <div class="k"><h4>Two channels, deliberately split</h4><p>The reflective letter (about itself) and the mechanical attention card (only when a human is needed).</p></div>
-      <div class="k"><h4>Encrypted at rest</h4><p>Memories, reflections — and now everything — sit under a user-held key.</p></div>
+      <div class="k"><h4>Guards in code, not in a prompt</h4><p>The shelf check, graph writes, freshness, and self pass are enforced. Task/outbound guards are deferred; redaction is still a stub.</p></div>
+      <div class="k"><h4>Two channels, deliberately split</h4><p>Reflective sermon and mechanical notification exist today; a separate attention-card channel is deferred.</p></div>
       <div class="k"><h4>The Jungian framework, as a lens</h4><p>Shadow, tensions, archetypes, the six rules — repurposed to read <em>you</em>, not discarded.</p></div>
     </div>
   </section>
 
   <section class="sec" id="shape">
     <p class="kicker"><span class="n">03</span> The shape</p>
-    <h2>A local-first daemon, a web UI, a tray icon</h2>
-    <p class="lead">In the Jellyfin sense: it runs on your Mac, serves a web app on <code>localhost</code>, and is a resident process — not a script that fires and exits. Exposed to your own devices over Tailscale; never to the public internet.</p>
+    <h2>Mac Notes, a local daemon, a working tray</h2>
+    <p class="lead">Wunicorm is a local-only, single-user macOS process. You keep writing in Mac Notes; the daemon reads on schedule and returns a sermon through a notification and the Wunicorm Notes folder. There is no web app, localhost server, or Tailscale.</p>
     <div class="flow" style="margin-top:20px;">
-      <div class="fnode"><div class="ft">Menu-bar icon</div><div class="fd">the daemon's face · status</div></div>
-      <div class="farrow">launch / config →</div>
-      <div class="fnode"><div class="ft">Localhost web app</div><div class="fd">the secure notes app, in your browser</div></div>
+      <div class="fnode"><div class="ft">Mac Notes</div><div class="fd">your existing input surface</div></div>
+      <div class="farrow">osascript →</div>
+      <div class="fnode"><div class="ft">Wunicorm daemon</div><div class="fd">daily schedule · memory graph · sermon</div></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><div class="ft">Menu-bar tray</div><div class="fd">idle · dreaming · notification</div></div>
     </div>
     <div class="flow-sub">
-      <span class="ft">Tailscale</span>
+      <span class="ft">Wunicorm.app + DMG</span>
       <span class="farrow">→</span>
-      <span class="fd">the same local app, reachable from your other devices on a private mesh — access, not a third party processing your data.</span>
+      <span class="fd">current architecture, vendored OpenSSL, ad-hoc signature; verified mount, bundle, and checksum.</span>
     </div>
     <ul class="clean" style="margin-top:16px;">
-      <li class="b">The Mac app is a thin shell over the localhost web UI; the note-taking UX is built as a web app for fast iteration.</li>
-      <li class="b">Config lives in the app, not in files you edit by hand.</li>
-      <li class="b">The daemon is the app's heart: it owns the schedule and runs the intelligence in the background.</li>
+      <li class="b">The tray is the only custom UI: status, open Wunicorm folder, and quit.</li>
+      <li class="b">Config is TOML under <code>~/Library/Application Support/memory-proto/</code>.</li>
+      <li class="b">The default schedule is one thorough dream per day at 22:00 local time.</li>
     </ul>
   </section>
 
   <section class="sec" id="notes">
     <p class="kicker"><span class="n">04</span> The notes app</p>
-    <h2>As plain as the note apps you already use</h2>
-    <p class="lead">You have it open and you type into it the way you already do. It holds the heterogeneous, real stuff — todos, project notes, house tasks, thinking, poetry. This is the new primary input for the intelligence.</p>
+    <h2>Mac Notes is the editor</h2>
+    <p class="lead">No custom note-taking UI is needed. Your existing folders hold the input; the excluded Wunicorm folder holds generated sermons. AppleScript supplies stable note IDs, HTML bodies, folders, and modification dates.</p>
     <div class="window" style="margin-top:20px;">
-      <div class="winbar"><i></i><i></i><i></i><span class="wt">wunicorm — notes</span></div>
+      <div class="winbar"><i></i><i></i><i></i><span class="wt">Mac Notes</span></div>
       <div class="winbody">
         <div class="side">
-          <p class="mo">This month</p>
-          <div class="note-row sel"><div class="nt">Companies to research</div><div class="ns">5 links · today</div></div>
-          <div class="note-row"><div class="nt">Ramp — call notes</div><div class="ns">yesterday</div></div>
-          <div class="note-row"><div class="nt">NX monorepo refactor</div><div class="ns">2d ago</div></div>
-          <div class="note-row"><div class="nt">Hallway repaint</div><div class="ns">todo · house</div></div>
-          <p class="mo" style="margin-top:14px;">Last month</p>
-          <div class="note-row"><div class="nt">Job search — strategy</div><div class="ns">3w ago</div></div>
-          <div class="note-row wun"><div class="nt">What wunicorm noticed</div><div class="ns">inferred · wk 34</div></div>
+          <p class="mo">Your folders · input</p>
+          <div class="note-row sel"><div class="nt">Notes</div><div class="ns">read on schedule</div></div>
+          <div class="note-row"><div class="nt">WS</div><div class="ns">read on schedule</div></div>
+          <div class="note-row"><div class="nt">Money</div><div class="ns">read on schedule</div></div>
+          <p class="mo" style="margin-top:14px;">Generated · excluded</p>
+          <div class="note-row wun"><div class="nt">Wunicorm</div><div class="ns">sermons written here</div></div>
+          <div class="note-row"><div class="nt">Recently Deleted</div><div class="ns">excluded</div></div>
         </div>
         <div class="pane">
-          <div class="pt">Companies to research</div>
-          <div class="pm">today · 12:04</div>
+          <div class="pt">Sermon — 2026-11-08</div>
+          <div class="pm">Wunicorm folder · HTML note</div>
           <div class="pl w1"></div>
           <div class="pl w2"></div>
-          <ul class="chk">
-            <li class="d">Linear — check the platform team</li>
-            <li>Basecamp — senior frontend openings</li>
-            <li>Vonage — remote UK</li>
-            <li>Figma — design systems</li>
-            <li>One more to add</li>
-          </ul>
-          <div class="cta"><span class="sp">wunicorm →</span> Research these 5 companies</div>
+          <div class="pl w3"></div>
+          <div class="pl w1"></div>
+          <div class="pl w4"></div>
+          <div class="callout" style="margin-top:20px; font-size:13px;"><b>Notification sent.</b> The full sermon remains inspectable and editable in Mac Notes.</div>
         </div>
       </div>
     </div>
-    <h3>Features</h3>
+    <h3>Implemented ingress and output</h3>
     <div class="grid g2">
-      <div class="card">
-        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Side panel</h4>
-        <p style="margin:0; font-size:13.5px;">Notes ordered by last-edited, grouped by <strong>Month</strong> — the familiar shape. Sort options later.</p>
-      </div>
-      <div class="card">
-        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Tiptap bodies</h4>
-        <p style="margin:0; font-size:13.5px;">Rich note content: headings, lists, links, images, code — already in the foundation.</p>
-      </div>
-      <div class="card">
-        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Two note spaces</h4>
-        <p style="margin:0; font-size:13.5px;">One store, two sources — <code class="c-u">source: user</code> and <code class="c-i">source: wunicorm</code>. Your notes, and its notes-on-you.</p>
-      </div>
-      <div class="card">
-        <h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Task CTAs live on notes</h4>
-        <p style="margin:0; font-size:13.5px;">When wunicorm proposes a task derived from a note, a button appears on that note. You decide.</p>
-      </div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Core Data identity</h4><p style="margin:0; font-size:13.5px;">The note URI remains stable across renames; modification dates drive change detection.</p></div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">HTML → text</h4><p style="margin:0; font-size:13.5px;">Notes markup is stripped for the LLM. Sermons are converted back to simple HTML.</p></div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Excluded output folder</h4><p style="margin:0; font-size:13.5px;">The daemon never ingests its own Wunicorm notes or Recently Deleted content.</p></div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Task CTAs · deferred</h4><p style="margin:0; font-size:13.5px;">There is no task proposal, confirmation button, or general task execution yet.</p></div>
     </div>
   </section>
 
   <section class="sec" id="security">
     <p class="kicker"><span class="n">05</span> Security &amp; privacy</p>
-    <h2>First-class — the key lives with you</h2>
-    <p class="lead">The password is not a login the server checks. It is a <strong>key-derivation input</strong>: it unlocks a key that is derived in your browser, and the server never sees it. This inverts v1, where the decryption password was a server secret in <code>.env</code>.</p>
+    <h2>OS-level, local-first, local models by default</h2>
+    <p class="lead">Single-user, local-first. Your Mac is the server. The security model relies on the OS, not on an app-level crypto layer.</p>
     <div class="sec-steps" style="margin-top:20px;">
-      <div class="step"><span class="sn">01 · first run</span><h4>Set a password</h4><p>You choose a master password. The app derives a <strong>recovery seed phrase</strong> you store somewhere safe — a wallet, a password manager, paper.</p></div>
-      <div class="step"><span class="sn">02 · later runs</span><h4>Password unlocks</h4><p>The password re-derives the key on-device and decrypts existing content. Forget it, and the seed re-derives the key.</p></div>
-      <div class="step"><span class="sn">03 · at rest</span><h4>Everything encrypted</h4><p>Notes, memories, reflections and the graph all sit under the same key — <code class="c-s">AES-GCM</code> — as ciphertext. No server master key.</p></div>
-      <div class="step"><span class="sn">04 · at the model</span><h4>Redaction first</h4><p>Whatever is handed to an LLM is scrubbed before it leaves the machine — and you can see exactly what was hidden.</p></div>
+      <div class="step"><span class="sn">01 · at rest</span><h4>FileVault</h4><p>Full-disk encryption protects the database file. The OS handles screen locks and session security.</p></div>
+      <div class="step"><span class="sn">02 · local only</span><h4>No app network layer</h4><p>No localhost API, Tailscale, or remote app traffic exists. macOS automation permission gates Notes access.</p></div>
+      <div class="step"><span class="sn">03 · at the model</span><h4>Local LLMs; redaction pending</h4><p>The target is local model servers. The redaction seam is currently a stub and must be implemented before any remote endpoint.</p></div>
     </div>
-    <div class="callout"><b>Client-side, zero-knowledge.</b> The key is derived on your device (password → KDF → key). Note content is fetched, decrypted and rendered <b>in the browser</b> — the shell is server-rendered, the content is not. "Wrong password" is detected client-side, not by a server 401.</div>
-    <div class="callout warn"><b>The price, stated plainly.</b> Key management is yours, exactly like a crypto wallet. That is the cost of "privacy is first class" — so the key UX has to be right: the seed shown once, no silent re-derivation, a way to rotate.</div>
+    <div class="callout"><b>No app-level encryption.</b> No client-side zero-knowledge, no password/seed/key-derivation. The daemon owns the data and processes it in plaintext. The threat model is "what if my Mac is stolen" — FileVault covers that.</div>
+    <div class="callout warn"><b>Revisit if the product grows.</b> If this becomes a distributed or cloud-hosted service, the trust model changes and encryption at the application layer becomes necessary. For a personal, single-user, Mac-first daemon — it is complexity without a matching threat.</div>
   </section>
 
   <section class="sec" id="arch">
     <p class="kicker"><span class="n">06</span> Architecture</p>
-    <h2>The system and its parts</h2>
-    <p class="lead">Your notes flow down a spine: stored, watched, structured into a graph, read for insight, and returned as augmentation. Three cross-cutting layers — scheduling, config, security — span the whole thing.</p>
+    <h2>The implemented daemon spine</h2>
+    <p class="lead">On each scheduled run, ingress queues changed notes, the established Dreamer writes and reads the graph, and the daemon delivers the resulting sermon locally.</p>
     <div class="arch" style="margin-top:20px;">
       <div class="spine">
-        <div class="layer u"><div class="ln">Notes App</div><div class="lj">Mac tray → localhost web · Tiptap · month-grouped · CTAs</div></div>
-        <div class="aarrow">writes<span class="tri">▼</span></div>
-        <div class="layer s"><div class="ln">Notes DB</div><div class="lj">your notes + wunicorm's notes-on-you · encrypted at rest</div></div>
-        <div class="aarrow">watches continuously + full runs on schedule<span class="tri">▼</span></div>
-        <div class="layer"><div class="ln">Sorter</div><div class="lj">one job: pull new / changed content, queue it for processing</div></div>
-        <div class="aarrow">hands off<span class="tri">▼</span></div>
-        <div class="layer"><div class="ln">Processing</div><div class="lj">an LLM judges &amp; structures content into nodes + the 4 pillar-edges, in semantic space-time</div></div>
-        <div class="aarrow">stores<span class="tri">▼</span></div>
-        <div class="layer s"><div class="ln">Graph DB</div><div class="lj">the Intelligence DB — the memory. semantic space-time, 4 relationship pillars</div></div>
-        <div class="aarrow">read + analyze<span class="tri">▼</span></div>
-        <div class="layer"><div class="ln">Insight services</div><div class="lj">the daily sermon · reflections · task proposals · the passes</div></div>
-        <div class="aarrow">via the channels you chose<span class="tri">▼</span></div>
-        <div class="layer u"><div class="ln">Outputs</div><div class="lj">email · notification · in-app helpdesk · note CTA · attention card · visual</div></div>
+        <div class="layer u"><div class="ln">Mac Notes</div><div class="lj">all folders except Wunicorm + Recently Deleted</div></div>
+        <div class="aarrow">osascript<span class="tri">▼</span></div>
+        <div class="layer"><div class="ln">Ingress</div><div class="lj">Core Data IDs + modification-date change detection · HTML stripped to text</div></div>
+        <div class="aarrow">new / changed notes<span class="tri">▼</span></div>
+        <div class="layer"><div class="ln">Scheduler</div><div class="lj">daily dream time + once-per-day guard · quiet days skip the LLM</div></div>
+        <div class="aarrow">queue<span class="tri">▼</span></div>
+        <div class="layer"><div class="ln">Processing + Dreamer</div><div class="lj">embeddings · LLM judge · graph writes · drift · choice ledger · self pass · reflection · shelf check</div></div>
+        <div class="aarrow">stores + reads<span class="tri">▼</span></div>
+        <div class="layer s"><div class="ln">LadybugDB</div><div class="lj">the derived semantic space-time memory · four pillars · HNSW vector search</div></div>
+        <div class="aarrow">sermon artifact + DreamReport<span class="tri">▼</span></div>
+        <div class="layer u"><div class="ln">Outputs</div><div class="lj">macOS notification + HTML sermon in the Wunicorm Notes folder</div></div>
       </div>
       <div class="side">
         <p class="side-lbl">cross-cutting</p>
-        <div class="layer x"><div class="ln">Scheduler</div><div class="lj">drives the sorter cadence, the full runs, and the insight services — working-day vs. overnight</div></div>
-        <div class="layer x"><div class="ln">Config</div><div class="lj">in the app: AI backend (any OpenAPI) · cadence · output channels · visual toggle</div></div>
-        <div class="layer x"><div class="ln">Security</div><div class="lj">password + seed · client-side zero-knowledge · redaction before any LLM call</div></div>
+        <div class="layer x"><div class="ln">Config</div><div class="lj">TOML + environment overrides for local chat and embedding endpoints</div></div>
+        <div class="layer x"><div class="ln">Tray</div><div class="lj">tao main-thread event loop · idle / dreaming / notification · open folder · quit</div></div>
+        <div class="layer x"><div class="ln">State + observation</div><div class="lj">last_seen + last_dream_date JSON · outbox · DreamReport and append-only dream log outside the graph</div></div>
       </div>
     </div>
   </section>
@@ -546,13 +528,20 @@
         </tbody>
       </table>
     </div>
-    <p class="muted" style="margin-top:12px; font-size:13px;">The processing layer (an LLM) is what reads the notes and makes these judgments — deciding the nodes, the pillar-edges, and where each sits in semantic space-time. Deeper concepts on the space-time model to follow; this is the v1 representation.</p>
+    <p class="muted" style="margin-top:12px; font-size:13px;">The processing layer (an LLM) reads notes and makes these judgments — deciding nodes, pillar-edges, and each node's position in semantic space-time.</p>
+    <h3>The function space · landed</h3>
+    <div class="grid g2">
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Two axes</h4><p style="margin:0; font-size:13.5px;">Judgment (thinking ↔ feeling) and perception (sensing ↔ intuiting), built from gate-verified, corpus-mean-centered anchor embeddings.</p></div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Two points, one frame</h4><p style="margin:0; font-size:13.5px;">U is the user's note centroid. W comes from Wunicorm's choices: a damped core plus compensation gated by rigidity, never direction.</p></div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">The self pass</h4><p style="margin:0; font-size:13.5px;">Writes SelfStates and trajectories, grounds claims in evidence, and rebuilds from notes plus the DreamRun choice ledger.</p></div>
+      <div class="card"><h4 style="margin:0 0 8px; color:var(--ink); font-size:15px;">Movement language only</h4><p style="margin:0; font-size:13.5px;">The sermon can say “toward thinking, away from feeling”; numbers are stripped before writing, and no effect is attributed to the system.</p></div>
+    </div>
   </section>
 
   <section class="sec" id="spaces">
     <p class="kicker"><span class="n">08</span> The two note spaces</p>
     <h2>Your notes, and its notes on you</h2>
-    <p class="lead">There are two note spaces in one store. You write the first; the intelligence writes the second. Both are encrypted under the same key, and the model of you is <strong>inspectable</strong> — you can read what it has learned.</p>
+    <p class="lead">The two spaces live directly in Mac Notes. Your eligible folders are input; the excluded Wunicorm folder is generated output. There is no custom <code>source:*</code> store.</p>
     <div class="spaces" style="margin-top:20px;">
       <div class="space you">
         <div class="sh"><span class="dot u"></span> Your notes</div>
@@ -567,46 +556,44 @@
         <div class="ex"><span class="t">habit</span>You plan house tasks on Sunday evenings.</div>
       </div>
     </div>
-    <div class="sharedbar">one store · one key · both encrypted · <b>the model is yours to read and correct</b></div>
+    <div class="sharedbar">Mac Notes · two writers · output excluded from ingress · <b>the model is yours to read and correct</b></div>
   </section>
 
   <section class="sec" id="loop">
     <p class="kicker"><span class="n">09</span> The augmentation loop</p>
-    <h2>Proactive, not a chat window</h2>
-    <p class="lead">Wunicorm does not wait to be asked. It runs its passes and reaches out — a daily <strong>sermon</strong> on your notes (v1's Persona, aimed at you, sprinkled with the Jungian lens), a notification, or a suggestion. The clearest expression of "evolving intelligence augmenting daily work": it reads a note and offers to do the next thing.</p>
+    <h2>Proactive, on a daily cadence</h2>
+    <p class="lead">Wunicorm does not wait to be asked. At dream time it reads changed notes, builds the graph, reflects, and returns the result locally. The current loop ends in a notification and an inspectable sermon — not a task CTA.</p>
     <div class="steps" style="margin-top:26px;">
-      <div class="stp you"><span class="no">1</span><div class="st">You write a note</div><div class="sd">five companies, links to their sites</div></div>
+      <div class="stp you"><span class="no">1</span><div class="st">You edit Mac Notes</div><div class="sd">your existing folders, as usual</div></div>
       <div class="stp-arrow">→</div>
-      <div class="stp"><span class="no">2</span><div class="st">Sorter detects</div><div class="sd">the change is queued</div></div>
+      <div class="stp"><span class="no">2</span><div class="st">Scheduled ingress</div><div class="sd">modification-date changes are queued</div></div>
       <div class="stp-arrow">→</div>
-      <div class="stp"><span class="no">3</span><div class="st">Graph structures it</div><div class="sd">concepts + the four pillars</div></div>
+      <div class="stp"><span class="no">3</span><div class="st">The Dreamer</div><div class="sd">judge · graph · self pass · reflection</div></div>
       <div class="stp-arrow">→</div>
-      <div class="stp"><span class="no">4</span><div class="st">Insight pass</div><div class="sd">reads it overnight</div></div>
+      <div class="stp"><span class="no">4</span><div class="st">Shelf check</div><div class="sd">prove the sermon artifact exists</div></div>
       <div class="stp-arrow">→</div>
-      <div class="stp"><span class="no">5</span><div class="st">Morning</div><div class="sd">"want me to research these 5?"</div></div>
-      <div class="stp-arrow">→</div>
-      <div class="stp you"><span class="no">6</span><div class="st">The note shows a CTA</div><div class="sd">you tap it — the task runs, the shelf check proves it</div></div>
+      <div class="stp you"><span class="no">5</span><div class="st">Local delivery</div><div class="sd">notification + Wunicorm Notes folder</div></div>
     </div>
     <div class="grid g2" style="margin-top:20px;">
-      <div class="card"><h4 style="margin:0 0 6px; font-size:14.5px; color:var(--ink);">The sermon</h4><p style="margin:0; font-size:13.5px;">A daily address on your own notes — reflective, pointed, sometimes affirming, sometimes a light scolding. The letter channel, about itself.</p></div>
-      <div class="card"><h4 style="margin:0 0 6px; font-size:14.5px; color:var(--ink);">The attention card</h4><p style="margin:0; font-size:13.5px;">Mechanical, sent only when something needs a human — open faults, blocked sends, failed tasks. No model writes it.</p></div>
+      <div class="card"><h4 style="margin:0 0 6px; font-size:14.5px; color:var(--ink);">The sermon · implemented</h4><p style="margin:0; font-size:13.5px;">A reflective address on your notes, with citations and Jungian movement language. The tray shows when it is ready.</p></div>
+      <div class="card"><h4 style="margin:0 0 6px; font-size:14.5px; color:var(--ink);">Tasks + attention cards · deferred</h4><p style="margin:0; font-size:13.5px;">“Research these five?” remains a target extension. There is no CTA, task runner, email, or separate attention-card channel yet.</p></div>
     </div>
   </section>
 
   <section class="sec" id="core">
     <p class="kicker"><span class="n">10</span> The durable core, re-homed</p>
     <h2>Safe because its acting is fenced</h2>
-    <p class="lead">v2 is agentic — it proposes and runs tasks, sends, generates. The trust does not come from it being unable to act; it comes from its acting being <strong>fenced by code</strong>. The v1 guard library moves inside the daemon and keeps its job unchanged.</p>
+    <p class="lead">The trust model remains <strong>fenced by code</strong>. The current message pipeline has a shelf check and observed DreamReports. The current daemon is not generally agentic; task-specific guards arrive with the deferred task layer.</p>
     <div class="tblwrap" style="margin-top:18px;">
       <table class="tbl">
         <thead><tr><th>Guard</th><th>What it enforces</th></tr></thead>
         <tbody>
-          <tr><td><b>Shelf check</b></td><td>a task is a failure unless its artifact exists, is non-empty, was written by this run, and passes its assertions — a green exit code never stands in for a result</td></tr>
+          <tr><td><b>Shelf check</b></td><td>an artifact is rejected unless it exists, is non-empty, was written by this run, and passes its assertions — a green exit code never stands in for a result</td></tr>
           <tr><td><b>Two kinds of truth</b></td><td>declaration (what should happen) is stored apart from observation (what did)</td></tr>
-          <tr><td><b>Outbound gate</b></td><td>nothing is sent to a recipient not on the allowlist; no body containing a credential; one send per (task, date)</td></tr>
-          <tr><td><b>Fault ledger</b></td><td>a known fault is closed by a fix, not by prose, and a fault is not re-described past its budget</td></tr>
-          <tr><td><b>Redaction</b></td><td>credential and personal values never reach the log or the model</td></tr>
-          <tr><td><b>Two channels</b></td><td>the letter and the attention card are different channels — the failure of 2026 was one channel carrying the other's news</td></tr>
+          <tr><td><b>Outbound gate · deferred</b></td><td>required for external sends and tasks; current outputs are local notifications and Notes writes</td></tr>
+          <tr><td><b>Fault ledger</b></td><td>the dream log and nightmare detector exist; the complete v1 task-fault workflow is not yet re-homed</td></tr>
+          <tr><td><b>Redaction · stub</b></td><td>a real redactor is mandatory before any remote LLM endpoint; local models are the current target</td></tr>
+          <tr><td><b>Two channels</b></td><td>sermon and mechanical notification exist; a separate attention-card implementation is deferred</td></tr>
         </tbody>
       </table>
     </div>
@@ -614,72 +601,71 @@
 
   <section class="sec" id="rhythm">
     <p class="kicker"><span class="n">11</span> The pipeline's rhythm</p>
-    <h2>Detect is cheap. Process is not.</h2>
-    <p class="lead">A continuous sorter watching every keystroke is cheap; running the LLM on every keystroke is not. So the two are split: the <strong>sorter detects and queues</strong> continuously, and the <strong>scheduler</strong> triggers <strong>processing</strong> at intervals. That single split makes "always watching" and "an overnight full run" one coherent flow.</p>
+    <h2>One thorough dream per day</h2>
+    <p class="lead">The implemented cadence is intentionally simple. The daemon ticks every 30 seconds, checks the configured local time, and runs only if it has not already dreamed that date. There is no continuous keystroke watcher.</p>
     <div class="pipe" style="margin-top:20px;">
-      <div class="pnode"><span class="tag">continuous</span><div class="pt">Watch</div><div class="pd">the sorter notices a note changed</div></div>
+      <div class="pnode"><span class="tag">every 30s</span><div class="pt">Check</div><div class="pd">is it dream time, and not dreamed today?</div></div>
       <div class="farrow">→</div>
-      <div class="pnode"><div class="pt">Queue</div><div class="pd">the change is held, cheaply, until a run</div></div>
+      <div class="pnode"><div class="pt">Pull + detect</div><div class="pd">read Notes; queue only new or changed notes</div></div>
       <div class="farrow">→</div>
-      <div class="pnode"><span class="tag">scheduled</span><div class="pt">Process</div><div class="pd">the LLM structures it into the graph</div></div>
+      <div class="pnode"><span class="tag">scheduled</span><div class="pt">Dream</div><div class="pd">a quiet day skips the LLM and the sermon</div></div>
     </div>
     <div class="cads">
-      <div class="cad day"><span class="badge">working-day</span><div class="ct" style="margin-top:8px;">Light · frequent</div><div class="cd">A quick pass over recent notes. Not the full treatment — just enough to keep the model current through the day.</div><div class="to">writes → <b>the same Graph DB</b></div></div>
-      <div class="cad night"><span class="badge">overnight dreamer</span><div class="ct" style="margin-top:8px;">Thorough · nightly</div><div class="cd">The deep pass: full reflection, memories, the Jungian lens, and the material for the morning's sermon.</div><div class="to">writes → <b>the same Graph DB</b></div></div>
+      <div class="cad night"><span class="badge">implemented</span><div class="ct" style="margin-top:8px;">Daily · default 22:00</div><div class="cd">Full reflection, memories, the Jungian self pass, sermon, notification, and Notes output. State persists after the run.</div><div class="to">guard → <b>last_dream_date</b></div></div>
+      <div class="cad day"><span class="badge">deferred</span><div class="ct" style="margin-top:8px;">Working-day · continuous</div><div class="cd">Light passes and continuous ingestion remain future work, not current behavior.</div><div class="to">target → <b>the same LadybugDB graph</b></div></div>
     </div>
-    <div class="callout"><b>The graph is derived, so it is rebuildable.</b> It is computed from the notes, not the source of truth. If it ever goes wrong, a full re-run regenerates it — the v1 "no stale artifact" principle, re-homed in the memory layer.</div>
+    <div class="callout"><b>The graph is derived, so it is rebuildable.</b> Scheduler state and dream observations live outside it. “Overnight” still requires the Mac to be awake.</div>
   </section>
 
   <section class="sec" id="foundation">
     <p class="kicker"><span class="n">12</span> Foundation &amp; stack</p>
-    <h2>Fork the blog app; build the new on top</h2>
-    <p class="lead">The notes app grows out of <code class="c-i">tees_valley_digital</code> — a small, clean full-stack app. Notes and blog posts are close enough cousins that the shell, auth, editor and data pattern carry over. This section stays overview-level on tech, as the doc intends.</p>
+    <h2>Rust around the proven memory layer</h2>
+    <p class="lead">The web-app fork was discarded. One Rust process now coordinates Mac Notes, LadybugDB, the Dreamer, local LLM servers, and the native menu-bar app.</p>
     <div class="grid g4" style="margin:16px 0 20px;">
-      <span class="pill">Bun</span><span class="pill">TanStack Start</span><span class="pill">Mantine</span><span class="pill">Tiptap</span>
-      <span class="pill">Drizzle ORM</span><span class="pill">Zod</span><span class="pill s">SQLite / Postgres — open</span><span class="pill i">LangGraph or similar</span>
+      <span class="pill">Rust</span><span class="pill s">LadybugDB</span><span class="pill">osascript</span><span class="pill i">tao + tray-icon</span>
+      <span class="pill">ureq</span><span class="pill">TOML + JSON</span><span class="pill s">Wunicorm.app</span><span class="pill i">DMG + codesign</span>
     </div>
     <div class="fcols">
-      <div class="fcol reuse"><h4>Reuse</h4><ul>
-        <li>App shell + Mantine theme</li>
-        <li>Tiptap rich-text editor</li>
-        <li>List / detail views</li>
-        <li>Ports &amp; adapters + DI data layer</li>
-        <li>Single-user auth as the unlock gate</li>
-        <li>Ops: Docker, CI, error/security plumbing</li>
+      <div class="fcol reuse"><h4>Proven core</h4><ul>
+        <li>Dreamer + judge + sermon writer</li>
+        <li>Four pillars + semantic space-time</li>
+        <li>Function space + self pass</li>
+        <li>HNSW search + versioned migrations</li>
+        <li>Hermetic tests + live probes</li>
       </ul></div>
-      <div class="fcol refac"><h4>Refactor / strip</h4><ul>
-        <li>Remove the public SSR surface + SEO + slug</li>
-        <li>Remove the publish workflow</li>
-        <li>Invert auth to private-by-default</li>
-        <li>Add the notes / todos / planner domain</li>
-        <li>SSR the shell, render content client-side</li>
+      <div class="fcol refac"><h4>Daemon shell</h4><ul>
+        <li>Notes ingress + change detection</li>
+        <li>Daily scheduler + persisted state</li>
+        <li>Notifications + Notes writer</li>
+        <li>Tao event loop + tray states</li>
+        <li>Graceful worker shutdown</li>
       </ul></div>
-      <div class="fcol new"><h4>Net-new</h4><ul>
-        <li>Client-side zero-knowledge encryption</li>
-        <li>Password + recovery seed flow</li>
-        <li>The daemon API (bearer token + sync)</li>
-        <li>The sorter / processing / graph layer</li>
-        <li>The insight &amp; sermon services</li>
+      <div class="fcol new"><h4>Native packaging</h4><ul>
+        <li>Info.plist + LSUIElement</li>
+        <li>Generated app and tray icons</li>
+        <li>Vendored OpenSSL + @rpath</li>
+        <li>Ad-hoc signature + verified DMG</li>
+        <li>Current architecture only</li>
       </ul></div>
     </div>
-    <p class="muted" style="margin-top:14px; font-size:13px;">Open at build time: the database (SQLite for single-file local-first, or Postgres to keep the fork as-is) and the specific graph store.</p>
+    <p class="muted" style="margin-top:14px; font-size:13px;">Resolved for this implementation: Mac Notes stores source content; LadybugDB stores derived memory. There is no SQLite/Postgres or graph-store choice left open.</p>
   </section>
 
   <section class="sec" id="folds">
     <p class="kicker"><span class="n">13</span> What still folds</p>
-    <h2>Open threads for the detail pass</h2>
-    <p class="lead">This is a rough plan on purpose. These are the places where the architecture is still soft, and where the detail work happens.</p>
+    <h2>Verification first, then the task layer</h2>
+    <p class="lead">The architecture is working; the remaining items are explicit. The most important boundary is that a full live scheduled dream has not yet been accepted.</p>
     <div class="threads" style="margin-top:20px;">
-      <div class="thr"><div class="tt">Daemon key access <span class="st">security</span></div><p>How a background daemon decrypts zero-knowledge notes when the app is closed — a secure OS slot (Keychain / Secure Enclave) while the Mac is unlocked, or a defined "unlocked-for-the-daemon" window.</p></div>
-      <div class="thr"><div class="tt">Database choice <span class="st">stack</span></div><p>SQLite for truly single-file local-first, or Postgres to keep the fork. Drizzle covers both; it's a portability call.</p></div>
-      <div class="thr"><div class="tt">The space-time model <span class="st">graph</span></div><p>The deeper concepts behind semantic space-time — how position, embedding and time combine, and how drift is measured. Concepts to come.</p></div>
-      <div class="thr"><div class="tt">"Overnight" = machine-on <span class="st">honest limit</span></div><p>On a local daemon the thorough pass runs when the Mac is awake or idle. An accepted consequence of local-first + Mac-first; stated, not hidden.</p></div>
-      <div class="thr"><div class="tt">The daemon API surface <span class="st">contract</span></div><p>Bearer-token auth + sync endpoints: read notes, write notes, read notes-on-you, tag a CTA, propose / trigger tasks.</p></div>
-      <div class="thr"><div class="tt">How far a task may reach <span class="st">trust</span></div><p>Read-only research vs. something with side effects (a deploy). Confirmation per-task or per-capability, and how the user sets that boundary.</p></div>
+      <div class="thr"><div class="tt">Live daemon acceptance <span class="st">pending</span></div><p>Prove scheduled ingestion, graph writes, notification, Notes output, quiet-day behavior, and the once-per-day/next-day guard against real Mac Notes and local LLM servers.</p></div>
+      <div class="thr"><div class="tt">Task CTAs and task reach <span class="st">deferred</span></div><p>Design the confirmation surface and separate read-only research from capabilities with side effects. No task engine is exposed yet.</p></div>
+      <div class="thr"><div class="tt">Launch at login <span class="st">deferred</span></div><p>The DMG installs only the app. It does not create a LaunchAgent or start Wunicorm automatically.</p></div>
+      <div class="thr"><div class="tt">Distribution <span class="st">deferred</span></div><p>Developer ID, notarization, and universal Intel/Apple Silicon builds are future work. The current DMG is local and ad-hoc signed.</p></div>
+      <div class="thr"><div class="tt">Remote-model safety <span class="st">required</span></div><p>Implement real redaction before any non-local LLM endpoint. The current redaction seam is a stub.</p></div>
+      <div class="thr"><div class="tt">"Overnight" = machine-on <span class="st">honest limit</span></div><p>The daily pass runs only while the Mac is awake — an accepted consequence of local-first design.</p></div>
     </div>
     <div class="close">
-      <div class="cl">A notes and planner that uses evolving intelligence to augment daily life and work.</div>
-      <p>A new project from the ground up — but standing on the parts of v1 that earned their place: the task engine, the guards, the two channels, the encrypted memory. The input becomes your notes; the subject of the engine becomes you.</p>
+      <div class="cl">A working Mac Notes daemon with the memory engine intact.</div>
+      <p>Components, 177 tests, tray appearance, and the DMG are verified. The next milestone is a real scheduled dream; task proposals and broader distribution follow only after that evidence exists.</p>
     </div>
   </section>
 
@@ -687,8 +673,8 @@
 
 <footer>
   <div class="wrap">
-    <span>wunicorm v2 · design overview · draft · oct 2026</span>
-    <span>companion: plan.md · session export in this directory</span>
+    <span>wunicorm v2 · design + status · v1 daemon · nov 2026</span>
+    <span>companion: plan.md · live scheduled-dream acceptance pending</span>
   </div>
 </footer>
 

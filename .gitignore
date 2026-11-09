@@ -1,3 +1,6 @@
 
 # Live demo dream artifacts
 memory-proto/demo-data/
+
+# macOS cruft
+.DS_Store

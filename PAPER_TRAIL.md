@@ -31,6 +31,8 @@ Concrete decisions made during planning and development. Append-only — no entr
 
 **Files affected:** `plan.md` (§1, §4, §5, §7, §11, §12, Appendix A), `index.html` (sections 04, 05, 06, 08, 12, 13)
 
+**Supersession note (2026-11-08):** Tailscale is no longer part of the current architecture. The implemented daemon is local-only and exposes no app-level network transport, so there is no in-transit app traffic to secure. FileVault and the local-LLM/redaction boundary remain applicable. See D-003.
+
 ---
 
 ## D-002: A two-point Jungian function space in the memory graph
@@ -60,3 +62,37 @@ Concrete decisions made during planning and development. Append-only — no entr
 - W's own core stuckness monitoring once months of trajectory exist (the auditor-audited rule, made operational).
 
 **Files affected:** `memory-proto/` (migration batches v2-v3: `FunctionAnchor`, `SelfState`, `DreamRun`, `Grounds`, `SELF_TRAJECTORY`, Note/Memory columns; `src/axes.rs`, `src/queries/psyche.rs`, the self pass in `src/dreamer.rs`, `prompts/anchors-v1.md` + extract/sermon prompt updates, the gate in `tests/anchor_eval.rs`, AGILE.md Tasks 20-31), `plan.md` (§6)
+
+---
+
+## D-003: A local Mac Notes daemon and native DMG, not a web app
+
+**Date:** 2026-11-08
+
+**Decision:** Build the working v1 as a single Rust macOS process around the proven memory layer. Mac Notes is both the input surface and the sermon destination. There is no custom web notes app, localhost server, Tailscale transport, Tiptap editor, separate notes DB, or `tees_valley_digital` fork. Package the result as `Wunicorm.app` and a current-architecture, locally ad-hoc-signed DMG.
+
+**Context:** The original design used a Jellyfin-style resident daemon serving a browser app. In practice, the user already lives in Mac Notes, and AppleScript can read note IDs, HTML bodies, folders, and modification dates. Keeping the source in Mac Notes removes an entire application layer while preserving the memory pipeline. The first tray implementation built a status item without a running Cocoa event loop; the daemon ran but no icon appeared. The fix uses `tao`, creates the tray on `StartCause::Init`, forwards menu events, and returns cleanly for worker-thread shutdown.
+
+**Reasoning:**
+- **Mac Notes as the two spaces.** All user folders except `Wunicorm` and `Recently Deleted` are eligible for ingress. The `Wunicorm` folder holds generated sermons and is excluded, preventing the daemon from ingesting its own output.
+- **Stable, cheap change detection.** The Core Data note URI identifies a note across renames; modification-date comparison queues only new or changed notes. HTML is stripped to text for the LLM and retained as the output format for Notes.
+- **A simple cadence first.** The scheduler ticks every 30 seconds and triggers one thorough dream per day at a configurable time (default 22:00), guarded by `last_dream_date`. Continuous and working-day passes are deferred.
+- **One process, native UI.** The worker thread owns scheduling and dreams; the main thread owns the tao tray loop. Shared atomics drive idle, dreaming, and notification icons. The tray menu opens the Notes folder and quits gracefully.
+- **Local output only for v1.** A produced sermon passes the shelf check, is read from the outbox, triggers a macOS notification, and is written as HTML into Mac Notes. Task CTAs and the general task engine remain deferred.
+- **Reproducible local installation.** `scripts/package-macos.sh` builds the current architecture, assembles the app, generates icons, injects the Cargo version, vendors and re-signs OpenSSL dylibs, rewrites their load paths to `@rpath`, includes the OpenSSL license, ad-hoc signs the app, and creates/verifies the DMG. No LaunchAgent is installed.
+- **Honest verification boundary.** The 177-test suite and Clippy pass. The demo memory pipeline is covered by its full eval. The DMG was mounted and its executable, Applications symlink, plist, signature, and checksum were verified. The tray's appearance was visually confirmed by the user. **A complete live scheduled dream against real Mac Notes and the local LLM servers remains pending**; packaging and component tests are not accepted as proof of that cycle.
+
+**What stays:**
+- LadybugDB, the Dreamer, four pillars, function space, self pass, dream report/log, shelf check, and hermetic test strategy.
+- FileVault as the at-rest boundary and local OpenAI-compatible LLM endpoints as the default.
+- The task engine as a first-class target extension, not an implemented claim.
+- The graph as derived and rebuildable; scheduler state and dream observations remain outside it.
+
+**Revisit triggers:**
+- Complete Task 9 live acceptance before calling the daemon end-to-end verified.
+- Implement real redaction before configuring any remote LLM endpoint.
+- Add a LaunchAgent only when launch-at-login is explicitly desired.
+- Move to Developer ID signing, notarization, and universal builds when distributing beyond the local machine.
+- Reintroduce a network security model only if a remote app or distributed service is ever built.
+
+**Files affected:** `memory-proto/src/{main,daemon,config,ingest,scheduler,output,tray}.rs`, `memory-proto/examples/demo.rs`, `memory-proto/assets/`, `memory-proto/packaging/macos/`, `memory-proto/scripts/package-macos.sh`, `memory-proto/Cargo.{toml,lock}`, `memory-proto/{README,AGILE}.md`, `README.md`, `plan.md`, `index.html`, `PAPER_TRAIL.md`
