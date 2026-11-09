@@ -1,12 +1,14 @@
 use chrono::{DateTime, Utc};
-use memory_proto::MemoryDb;
-use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery, run_dream};
+use memory_proto::dreamer::{
+    run_dream, DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery,
+};
 use memory_proto::edges::Contains;
 use memory_proto::message::shelf_check;
 use memory_proto::mutations::NodeRef;
 use memory_proto::nodes::{Entity, Note};
 use memory_proto::observability::{is_nightmare, read_dream_reports};
 use memory_proto::schema::EMBEDDING_DIM;
+use memory_proto::MemoryDb;
 
 const T: i64 = 1_700_000_000;
 
@@ -152,7 +154,7 @@ fn dream_writes_judgments_and_speaks() {
 }
 
 #[test]
-fn dangling_edge_reference_is_recorded_not_silently_dropped() {
+fn edge_fence_names_dangling_and_illegal_label_faults() {
     let dir = tempfile::tempdir().unwrap();
     let db = open_test_db(&dir.path().join("dream.db"));
     let conn = db.connect().unwrap();
@@ -177,9 +179,16 @@ fn dangling_edge_reference_is_recorded_not_silently_dropped() {
             // Dangling: the judge hallucinated an entity that was never
             // written.
             (
-                NodeRef::new("e1", "Entity"),
+                NodeRef::new("n1", "Note"),
                 NodeRef::new("ghost", "Entity"),
                 contains_edge("c2"),
+            ),
+            // Wrong-shaped: entities are never a contains source — the
+            // fence names it before the database ever sees the query.
+            (
+                NodeRef::new("e1", "Entity"),
+                NodeRef::new("e1", "Entity"),
+                contains_edge("c3"),
             ),
         ],
         similar: vec![],
@@ -202,13 +211,28 @@ fn dangling_edge_reference_is_recorded_not_silently_dropped() {
         ),
     );
 
-    // The fault is named, not swallowed.
+    // Both faults are named, not swallowed: the dangling reference…
     assert!(
         report
             .errors
             .iter()
-            .any(|e| e.contains("dangling reference")),
+            .any(|e| e.contains("dangling reference: Entity/ghost")),
         "errors: {:?}",
+        report.errors
+    );
+    // …and the illegal endpoint label, named by its constraint.
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| e.contains("illegal label 'Entity' for FROM_Contains: e1")),
+        "errors: {:?}",
+        report.errors
+    );
+    assert_eq!(
+        report.errors.len(),
+        2,
+        "exactly two faults: {:?}",
         report.errors
     );
     // Any error makes the dream a nightmare, even though the valid parts
@@ -285,13 +309,8 @@ fn dream_run_row(conn: &lbug::Connection, id: &str) -> (i64, i64, i64, i64, i64)
         .execute(&mut stmt, vec![("id", lbug::Value::String(id.to_string()))])
         .unwrap();
     for row in result {
-        if let [
-            lbug::Value::Int64(t),
-            lbug::Value::Int64(f),
-            lbug::Value::Int64(s),
-            lbug::Value::Int64(n),
-            lbug::Value::Int64(d),
-        ] = row.as_slice()
+        if let [lbug::Value::Int64(t), lbug::Value::Int64(f), lbug::Value::Int64(s), lbug::Value::Int64(n), lbug::Value::Int64(d)] =
+            row.as_slice()
         {
             return (*t, *f, *s, *n, *d);
         }

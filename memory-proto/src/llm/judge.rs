@@ -28,7 +28,7 @@ use serde::Deserialize;
 
 use crate::dreamer::{DreamJudgment, Judge, Triple};
 use crate::edges::{Contains, HasProperty, LeadsTo, Similar};
-use crate::llm::{ChatMessage, LlmClient, extract_prompt, extract_schema, redact};
+use crate::llm::{extract_prompt, extract_schema, redact, ChatMessage, LlmClient};
 use crate::mutations::NodeRef;
 use crate::nodes::{Entity, Event, Fact, Memory, Note, Time};
 
@@ -279,8 +279,11 @@ impl LlmJudge {
         }
 
         // Pillar edges. Endpoints resolve against the extraction; an
-        // unknown label becomes a phantom Entity the write path's
-        // dangling-ref fence will name as a fault.
+        // unknown label becomes a phantom Entity. The write path's
+        // fences name it — as an illegal-label fault when the pillar
+        // forbids that endpoint's type outright, as a dangling
+        // reference when the type is legal but the node was never
+        // written.
         let mut contains: Vec<Triple<Contains>> = vec![];
         let mut similar: Vec<Triple<Similar>> = vec![];
         let mut has_property: Vec<Triple<HasProperty>> = vec![];

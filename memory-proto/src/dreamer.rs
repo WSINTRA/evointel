@@ -23,7 +23,7 @@ use lbug::{Connection, Value};
 
 use crate::axes::{Axis, Function, RIGIDITY_SPAN};
 use crate::db::DbResult;
-use crate::edges::{Contains, Grounds, HasProperty, LeadsTo, Similar};
+use crate::edges::{Contains, EdgeType, Grounds, HasProperty, LeadsTo, Similar};
 use crate::message::{Citation, Insight, Message, MessageKind, shelf_check, write_message};
 use crate::mutations::{
     NodeRef, insert_dream_run, insert_entity, insert_event, insert_fact, insert_memory,
@@ -968,8 +968,11 @@ fn apply_judgment(
     }
 }
 
-/// Links one edge, validating both endpoints first — a dangling
-/// reference is a recorded fault, never a silent no-op.
+/// Links one edge, validating the endpoints first: label legality
+/// against the schema's poly-rel allowlists, then existence. An
+/// illegal label is a wrong-shaped claim, a dangling reference a
+/// hallucinated one — either is a recorded fault, never a silent
+/// no-op and never a raw binder error from the database.
 fn link_edge(
     conn: &Connection,
     edge_name: &str,
@@ -979,6 +982,22 @@ fn link_edge(
     nodes_written: &mut usize,
     errors: &mut Vec<String>,
 ) {
+    if let Some(kind) = EdgeType::from_label(edge_name) {
+        for (node, side, legal) in [
+            (from, "FROM", kind.allowed_from_labels()),
+            (to, "TO", kind.allowed_to_labels()),
+        ] {
+            if !legal.contains(&node.label.as_str()) {
+                errors.push(format!(
+                    "{edge_name} edge skipped — illegal label '{}' for {side}_{edge_name}: {} (expected one of: {})",
+                    node.label,
+                    node.id,
+                    legal.join(", ")
+                ));
+                return;
+            }
+        }
+    }
     for node in [from, to] {
         match node_exists(conn, node) {
             Ok(true) => {}

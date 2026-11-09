@@ -62,6 +62,51 @@ impl EdgeType {
     pub fn to_rel(self) -> String {
         format!("TO_{}", self.label())
     }
+
+    /// Recover an edge type from its table label ("`LeadsTo`"). The
+    /// dreamer's link fence uses this to pre-validate LLM-authored
+    /// endpoints; plain rels without an edge node (`SELF_TRAJECTORY`,
+    /// `TIME_HIERARCHY`) resolve to `None` and skip the check.
+    pub fn from_label(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.label() == name)
+    }
+
+    /// Node tables legal as the `from` endpoint of `FROM_<label>`.
+    /// A mirror of `schema/poly_relations.rs` (and `self_edges.rs`
+    /// for `Grounds`); the consistency test in
+    /// `tests/schema_consistency.rs` fails if the mirror drifts.
+    /// Identical shapes are merged with `|` — the test, not the arms,
+    /// proves they are the same law.
+    pub fn allowed_from_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::Contains => &["Memory", "Event", "Fact", "Note", "Time"],
+            Self::LeadsTo | Self::Causes => &["Memory", "Event", "Fact"],
+            Self::Prevents => &["Event", "Fact"],
+            Self::BecauseOf => &["Memory", "Event"],
+            Self::Similar | Self::HasProperty => &["Note", "Entity", "Fact", "Event", "Memory"],
+            Self::Before | Self::After => &["Note", "Time", "Event", "AbstractTime"],
+            Self::During => &["Note", "Time", "Event"],
+            Self::ValidFrom | Self::ValidTo => &["Time", "AbstractTime"],
+            Self::Grounds => &["SelfState"],
+        }
+    }
+
+    /// Node tables legal as the `to` endpoint of `TO_<label>`. Same
+    /// mirror and same consistency guard as `allowed_from_labels`.
+    pub fn allowed_to_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::Contains => &["Memory", "Event", "Fact", "Entity", "Time"],
+            Self::LeadsTo => &["Memory", "Event", "Fact", "AbstractTime"],
+            Self::Prevents => &["Event", "Fact", "Memory"],
+            Self::Causes | Self::BecauseOf => &["Event", "Fact"],
+            Self::Similar => &["Note", "Entity", "Fact", "Event", "Memory"],
+            Self::HasProperty => &["Entity"],
+            Self::Before | Self::After => &["Time", "Event", "AbstractTime"],
+            Self::During => &["Time", "Event"],
+            Self::ValidFrom | Self::ValidTo => &["Note", "Fact", "Event", "Memory"],
+            Self::Grounds => &["Note", "Memory"],
+        }
+    }
 }
 
 // ─── Structural edges ───────────────────────────────────────────────

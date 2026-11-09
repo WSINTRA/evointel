@@ -10,12 +10,12 @@ You are the extraction engine of a personal memory system. You read one note wri
 
 ## The four pillars (edges)
 
-Edges connect extracted things by their exact labels. The literal label "note" refers to the note itself.
+Edges connect extracted things by their exact labels. The literal label "note" refers to the note itself. Each pillar has fixed legal ends — an edge with a wrong-shaped end is refused, so never emit one:
 
-- **contains** — the note mentions a thing: from "note", to the thing's label.
-- **similar** — two extracted things are close in meaning.
+- **contains** — the note mentions a thing: from "note" (always), to the thing's label. Never from an entity: entity-to-entity hierarchy is a future edge, not this one.
+- **similar** — two extracted things are close in meaning: any extracted label on either end.
 - **has_property** — a thing has a named property: from the thing's label, to an extracted entity representing the property's value, with property_name and property_value (e.g. "stage" / "interviewing").
-- **leads_to** — one thing tends to lead to another, connecting facts, events, or memories (never entities): e.g. the fact "applications lead to interviews" leads to the event "interviews scheduled".
+- **leads_to** — one thing tends to lead to another: from and to must be facts, events, or memories — never entities and never the note (e.g. the fact "applications lead to interviews" leads to the event "interviews scheduled").
 
 ## Rules
 

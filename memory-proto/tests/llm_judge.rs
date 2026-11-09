@@ -8,7 +8,7 @@
 
 use chrono::{TimeZone, Utc};
 use memory_proto::db::MemoryDb;
-use memory_proto::dreamer::{DreamSpec, Judge, MechanicalSermon, NoDelivery, run_dream};
+use memory_proto::dreamer::{run_dream, DreamSpec, Judge, MechanicalSermon, NoDelivery};
 use memory_proto::llm::{LlmError, LlmJudge, RecordedClient};
 use memory_proto::mutations::insert_entity;
 use memory_proto::nodes::{Entity, Note};
@@ -107,12 +107,10 @@ fn maps_a_canned_judgment_end_to_end() {
     let calls = recorded.chat_calls();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].0[1].content, "I am anxious about my job search.");
-    assert!(
-        calls[0]
-            .1
-            .as_ref()
-            .is_some_and(|s| s["properties"].is_object())
-    );
+    assert!(calls[0]
+        .1
+        .as_ref()
+        .is_some_and(|s| s["properties"].is_object()));
 
     // One batch of meaning, in extraction order.
     assert_eq!(
@@ -180,16 +178,12 @@ fn maps_a_canned_judgment_end_to_end() {
     let year = judgment.times.iter().find(|t| t.id == "t-2026").unwrap();
     assert_eq!(year.granularity, "year");
     assert_eq!(year.label, "2026");
-    assert!(
-        judgment
-            .hierarchy
-            .contains(&("t-2026".to_string(), "t-2026-11".to_string()))
-    );
-    assert!(
-        judgment
-            .hierarchy
-            .contains(&("t-2026-11".to_string(), "t-2026-11-03".to_string()))
-    );
+    assert!(judgment
+        .hierarchy
+        .contains(&("t-2026".to_string(), "t-2026-11".to_string())));
+    assert!(judgment
+        .hierarchy
+        .contains(&("t-2026-11".to_string(), "t-2026-11-03".to_string())));
 
     // Pillar edges: note endpoints, property fields, deterministic ids.
     assert_eq!(judgment.contains.len(), 2);
@@ -300,12 +294,10 @@ fn reuses_existing_entities_by_label() {
         .unwrap();
     assert_eq!(anxiety.id, "e-anxiety", "fresh labels get slug ids");
     // And the contains edge points at the existing node.
-    assert!(
-        judgment
-            .contains
-            .iter()
-            .any(|(from, _, _)| from.id == "n-1" || from.id == "e-existing")
-    );
+    assert!(judgment
+        .contains
+        .iter()
+        .any(|(from, _, _)| from.id == "n-1" || from.id == "e-existing"));
 }
 
 #[test]
@@ -426,10 +418,12 @@ fn run_dream_with_llm_judge_names_phantoms_and_lands_the_rest() {
     };
     let report = run_dream(&conn, &judge, &MechanicalSermon, &NoDelivery, &spec);
 
-    // The hallucination is named; the good content lands anyway.
+    // The wrong-shaped claim is named before the database sees it; the
+    // good content lands anyway. (The phantom endpoint itself is named
+    // at the judgment level in maps_a_canned_judgment_end_to_end.)
     assert_eq!(report.errors.len(), 1, "errors: {:?}", report.errors);
     assert!(
-        report.errors[0].contains("dangling reference: Entity/e-perceived-void"),
+        report.errors[0].contains("illegal label 'Entity' for FROM_LeadsTo: e-job-search"),
         "errors: {:?}",
         report.errors
     );
