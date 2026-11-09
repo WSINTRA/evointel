@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use memory_proto::MemoryDb;
-use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, run_dream};
+use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery, run_dream};
 use memory_proto::edges::Contains;
 use memory_proto::message::shelf_check;
 use memory_proto::mutations::NodeRef;
@@ -122,6 +122,7 @@ fn dream_writes_judgments_and_speaks() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec(
             "run-1",
             vec![test_note("n1", "applied to five companies today")],
@@ -191,6 +192,7 @@ fn dangling_edge_reference_is_recorded_not_silently_dropped() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec(
             "run-bad",
             vec![test_note("n1", "applied to five companies today")],
@@ -230,6 +232,7 @@ fn quiet_day_writes_no_message() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec("run-quiet", vec![], one_hot(0), &outbox, &log),
     );
 
@@ -366,6 +369,7 @@ fn the_ledger_records_what_was_kept_and_what_was_let_go() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec(
             "run-ledger",
             vec![
@@ -442,8 +446,8 @@ fn the_ledger_is_idempotent_across_re_dreams() {
         &log,
     );
 
-    run_dream(&conn, &judge, &MechanicalSermon, &spec);
-    run_dream(&conn, &judge, &MechanicalSermon, &spec);
+    run_dream(&conn, &judge, &MechanicalSermon, &NoDelivery, &spec);
+    run_dream(&conn, &judge, &MechanicalSermon, &NoDelivery, &spec);
 
     let result = conn.query("MATCH (r:DreamRun) RETURN count(r);").unwrap();
     let rows: Vec<lbug::Value> = result.into_iter().next().unwrap();
@@ -463,6 +467,7 @@ fn a_quiet_day_writes_no_ledger_row() {
         &conn,
         &FixedJudge::new(vec![]),
         &MechanicalSermon,
+        &NoDelivery,
         &spec("run-silent", vec![], one_hot(0), &outbox, &log),
     );
 

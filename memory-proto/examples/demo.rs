@@ -7,7 +7,7 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use memory_proto::db::MemoryDb;
-use memory_proto::dreamer::{DreamSpec, TimeWindows, run_dream};
+use memory_proto::dreamer::{DreamSpec, NoDelivery, TimeWindows, run_dream};
 use memory_proto::llm::{LlmClient, LlmConfig, LlmJudge, LlmSermonWriter, UreqClient};
 use memory_proto::nodes::{FunctionAnchor, Note};
 use memory_proto::schema::{self, EMBEDDING_DIM};
@@ -145,7 +145,7 @@ fn main() {
     };
 
     println!("dreaming (three judgments and one sermon, ~1-2 min each)...");
-    let report = run_dream(&conn, &judge, &sermon, &spec);
+    let report = run_dream(&conn, &judge, &sermon, &NoDelivery, &spec);
     println!("\n=== dream report ===\n{report:#?}");
 
     // The self reading — the ledger's window. Numbers live here; the

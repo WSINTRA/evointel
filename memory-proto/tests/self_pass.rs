@@ -9,7 +9,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use lbug::Value;
 use memory_proto::MemoryDb;
-use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, run_dream};
+use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery, run_dream};
 use memory_proto::edges::Contains;
 use memory_proto::mutations::{NodeRef, seed_function_anchors};
 use memory_proto::nodes::{Entity, FunctionAnchor, Memory, Note};
@@ -220,6 +220,7 @@ fn self_pass_writes_both_states_with_provenance() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows("run-1", queue, &outbox, &log, nov_window(), nov_window()),
     );
 
@@ -315,12 +316,14 @@ fn the_second_dream_wires_the_trajectory_and_reads_drift() {
         &conn,
         &nov_judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows("run-nov", nov, &outbox, &log, nov_window(), nov_window()),
     );
     let report = run_dream(
         &conn,
         &feb_judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows("run-feb", feb, &outbox, &log, nov_window(), feb_window()),
     );
 
@@ -405,6 +408,7 @@ fn compensation_leans_only_against_a_rigid_one_sided_user() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows(
             "run-rigid",
             queue,
@@ -481,6 +485,7 @@ fn a_wandering_user_gets_no_compensation() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows(
             "run-wander",
             queue,
@@ -518,6 +523,7 @@ fn unseeded_anchors_leave_the_dream_untouched() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows(
             "run-plain",
             queue,
@@ -555,6 +561,7 @@ fn a_quiet_day_does_not_work_the_self() {
         &conn,
         &FixedJudge::new(vec![]),
         &MechanicalSermon,
+        &NoDelivery,
         &spec_with_windows(
             "run-silent",
             vec![],

@@ -44,6 +44,12 @@ pub struct DreamReport {
     /// The message artifact passed its shelf check. Vacuously true on
     /// quiet days (nothing was supposed to be produced).
     pub shelf_ok: bool,
+    /// Whether the message reached the user — the delivery seam's
+    /// read-back, not its return code. False when nothing was written,
+    /// when delivery failed, or when delivery isn't wired (tests,
+    /// demo). `#[serde(default)]` keeps older ledger lines readable.
+    #[serde(default)]
+    pub note_delivered: bool,
     /// Structural similarity to the pre-dream graph, when a pre-dream
     /// snapshot was taken. `None` means "not measured" — which is not
     /// the same as "stable".

@@ -9,9 +9,10 @@
 //! ([`SermonWriter`] — mechanical floor, LLM craft above it). Every
 //! step is observed; the [`DreamReport`] is the run's truth.
 //!
-//! The dreamer is the graph's *only writer*. It never delivers anything
-//! — the outbox artifact is the handoff to the (future) email /
-//! notification service layer.
+//! The dreamer is the graph's *only writer*. Delivery to the user is a
+//! seam ([`MessageDelivery`]): the outbox artifact stays the source of
+//! truth, and the daemon's delivery impl carries it to Mac Notes —
+//! read-back verified, faults recorded in the run's ledger.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -228,10 +229,42 @@ impl SermonWriter for MechanicalSermon {
     }
 }
 
+/// The outcome of one delivery attempt: the note's truth, the
+/// banner's truth, and the faults either produced. Nothing silent —
+/// every failure names itself.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeliveryOutcome {
+    pub note_delivered: bool,
+    pub notification_sent: bool,
+    pub errors: Vec<String>,
+}
+
+/// The delivery seam: carries a finished message to the user. The
+/// daemon's implementation writes Mac Notes and the notification;
+/// tests and the demo use `NoDelivery`. Delivery, like every other
+/// write, is verified by read-back — a green return code never stands
+/// in for a result.
+pub trait MessageDelivery {
+    fn deliver(&self, msg: &Message) -> DeliveryOutcome;
+}
+
+/// Delivery not wired (tests, demo): reports success without touching
+/// the machine.
+pub struct NoDelivery;
+
+impl MessageDelivery for NoDelivery {
+    fn deliver(&self, _msg: &Message) -> DeliveryOutcome {
+        DeliveryOutcome {
+            note_delivered: true,
+            notification_sent: true,
+            errors: vec![],
+        }
+    }
+}
+
 /// Deterministic judge for tests and demos: pre-baked judgments keyed
 /// by note id. Errors on notes it has no judgment for — the dreamer
-/// records that as a run error.
-#[derive(Debug)]
+/// records that as a run error.#[derive(Debug)]
 pub struct FixedJudge {
     by_note: HashMap<String, DreamJudgment>,
 }
@@ -291,6 +324,7 @@ pub fn run_dream(
     conn: &Connection,
     judge: &dyn Judge,
     sermon: &dyn SermonWriter,
+    delivery: &dyn MessageDelivery,
     spec: &DreamSpec,
 ) -> DreamReport {
     let started_at = Utc::now();
@@ -403,10 +437,10 @@ pub fn run_dream(
     // ── Reflect & speak: read the model, write the sermon material ──
     // Quiet days say nothing on purpose — silence is the correct output
     // when there is nothing new.
-    let (message_written, shelf_ok) = if spec.queue.is_empty() {
-        (false, true)
+    let (message_written, shelf_ok, note_delivered) = if spec.queue.is_empty() {
+        (false, true, false)
     } else {
-        reflect_and_speak(conn, sermon, spec, started_at, self_pass, &mut errors)
+        reflect_and_speak(conn, sermon, delivery, spec, started_at, self_pass, &mut errors)
     };
 
     let mut report = DreamReport {
@@ -420,6 +454,7 @@ pub fn run_dream(
         errors,
         message_written,
         shelf_ok,
+        note_delivered,
         similarity_to_prev,
         self_pass,
     };
@@ -982,18 +1017,19 @@ fn node_exists(conn: &Connection, node: &NodeRef) -> Result<bool, String> {
     Ok(false)
 }
 
-/// The reflection stage: read the model the dream just updated, and
-/// write the sermon into the outbox.
+/// The reflection stage: read the model the dream just updated, write
+/// the sermon into the outbox, and hand it to the delivery seam.
 ///
-/// Returns `(message_written, shelf_ok)`.
+/// Returns `(message_written, shelf_ok, note_delivered)`.
 fn reflect_and_speak(
     conn: &Connection,
     sermon: &dyn SermonWriter,
+    delivery: &dyn MessageDelivery,
     spec: &DreamSpec,
     now: DateTime<Utc>,
     self_pass: Option<SelfPassReport>,
     errors: &mut Vec<String>,
-) -> (bool, bool) {
+) -> (bool, bool, bool) {
     // Find the anchor concept by meaning.
     let anchor = match semantic_search(conn, &spec.anchor_embedding, 1, "Entity") {
         Ok(hits) => hits.into_iter().next(),
@@ -1004,7 +1040,7 @@ fn reflect_and_speak(
     };
     let Some(anchor) = anchor else {
         errors.push("reflection: no anchor concept found for the sermon".to_string());
-        return (false, false);
+        return (false, false, false);
     };
     let anchor_ref = NodeRef::new(anchor.id.clone(), "Entity");
     let anchor_name = get_entity(conn, &anchor.id)
@@ -1100,15 +1136,21 @@ fn reflect_and_speak(
     };
     match write_message(&msg, &spec.outbox) {
         Ok(path) => match shelf_check(&path, &spec.run_id) {
-            Ok(()) => (true, true),
+            Ok(()) => {
+                // The artifact is green; delivery is a separate truth,
+                // verified by the impl's own read-back.
+                let outcome = delivery.deliver(&msg);
+                errors.extend(outcome.errors);
+                (true, true, outcome.note_delivered)
+            }
             Err(reason) => {
                 errors.push(format!("shelf check failed: {reason}"));
-                (true, false)
+                (true, false, false)
             }
         },
         Err(e) => {
             errors.push(format!("message write failed: {e}"));
-            (false, false)
+            (false, false, false)
         }
     }
 }

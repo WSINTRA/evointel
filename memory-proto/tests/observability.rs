@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use memory_proto::observability::{
-    DreamReport, append_dream_report, is_nightmare, read_dream_reports,
+    append_dream_report, is_nightmare, read_dream_reports, DreamReport,
 };
 
 fn ts(t: i64) -> DateTime<Utc> {
@@ -19,6 +19,7 @@ fn good_report() -> DreamReport {
         errors: vec![],
         message_written: true,
         shelf_ok: true,
+        note_delivered: true,
         similarity_to_prev: Some(0.93),
         self_pass: None,
     }
@@ -132,4 +133,13 @@ fn dream_ledger_roundtrips() {
     // The ledger is append-only: a third append grows the file by a line.
     append_dream_report(&log, &good_report()).unwrap();
     assert_eq!(read_dream_reports(&log).unwrap().len(), 3);
+}
+
+#[test]
+fn pre_delivery_ledger_lines_stay_readable() {
+    // A ledger line written before note_delivered existed must still
+    // deserialize — the field defaults to false, never invents truth.
+    let line = r#"{"run_id":"run-old","started_at":"2026-11-09T03:23:16.137533Z","finished_at":"2026-11-09T04:30:47.737166Z","notes_in":2,"nodes_written":10,"nodes_added":9,"edges_added":5,"errors":[],"message_written":true,"shelf_ok":true,"similarity_to_prev":0.9,"self_pass":null}"#;
+    let report: DreamReport = serde_json::from_str(line).unwrap();
+    assert!(!report.note_delivered);
 }

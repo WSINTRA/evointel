@@ -13,11 +13,12 @@ use chrono::{Datelike, Local, Timelike, Utc};
 
 use crate::config::Config;
 use crate::db::MemoryDb;
-use crate::dreamer::{run_dream, DreamSpec, TimeWindows};
+use crate::dreamer::{self, DreamSpec, MessageDelivery, TimeWindows, run_dream};
 use crate::ingest;
 use crate::llm::{LlmClient, LlmConfig, LlmJudge, LlmSermonWriter, UreqClient};
+use crate::message::Message;
 use crate::nodes::FunctionAnchor;
-use crate::output;
+use crate::output::{self, SERMON_FOLDER};
 use crate::scheduler::{DaemonState, Scheduler};
 use crate::schema::{self, EMBEDDING_DIM};
 use crate::tray;
@@ -128,6 +129,65 @@ pub fn run_daemon(config: &Config, tray_state: &Arc<AtomicU8>, shutdown: &Arc<At
     eprintln!("[daemon] stopped");
 }
 
+/// The daemon's delivery seam: the sermon becomes a Mac Notes note in
+/// the `Wunicorm` folder, verified by read-back, and a notification.
+/// Every step's result is recorded — nothing is swallowed, and a
+/// written file never stands in for a delivered sermon.
+struct NotesDelivery {
+    /// Config override; `None` resolves to the first account holding
+    /// folders.
+    account: Option<String>,
+}
+
+impl MessageDelivery for NotesDelivery {
+    fn deliver(&self, msg: &Message) -> dreamer::DeliveryOutcome {
+        let mut outcome = dreamer::DeliveryOutcome::default();
+        let account = match output::resolve_notes_account(self.account.as_deref(), false) {
+            Ok(a) => a,
+            Err(e) => {
+                outcome.errors.push(format!("delivery: account resolution: {e}"));
+                return outcome;
+            }
+        };
+        let title = format!("Sermon — {}", msg.generated_at.format("%Y-%m-%d"));
+        let html = output::sermon_to_html(&msg.body);
+        let folder_write = output::ensure_notes_folder(&account, SERMON_FOLDER, false)
+            .and_then(|()| {
+                output::write_note(&account, &title, &html, SERMON_FOLDER, false)
+            });
+        match folder_write {
+            Ok(()) => {
+                outcome.note_delivered = match output::note_present(
+                    &account,
+                    SERMON_FOLDER,
+                    &title,
+                    false,
+                ) {
+                    Ok(true) => true,
+                    Ok(false) => {
+                        outcome.errors.push(format!(
+                            "delivery read-back failed: '{title}' not found in folder '{SERMON_FOLDER}' of account '{account}'"
+                        ));
+                        false
+                    }
+                    Err(e) => {
+                        outcome.errors.push(format!("delivery read-back: {e}"));
+                        false
+                    }
+                };
+            }
+            Err(e) => outcome.errors.push(format!("delivery: notes write: {e}")),
+        }
+        outcome.notification_sent = output::notify(SERMON_FOLDER, &msg.body, false).is_ok();
+        if !outcome.notification_sent {
+            outcome.errors.push(
+                "delivery: notification was refused by the system".to_string(),
+            );
+        }
+        outcome
+    }
+}
+
 /// Run one dream cycle: pull → detect → embed → dream → output.
 ///
 /// Returns `true` if a sermon was written to the outbox.
@@ -186,31 +246,23 @@ fn dream_cycle(
         dream_log: dream_log.to_path_buf(),
     };
 
+    let delivery = NotesDelivery {
+        account: config.notes_account.clone(),
+    };
     eprintln!("[dream] running dream cycle (run_id={run_id})...");
-    let report = run_dream(conn, &judge, &sermon, &spec);
+    let report = run_dream(conn, &judge, &sermon, &delivery, &spec);
     eprintln!(
-        "[dream] complete: {} nodes written, message={}, shelf_ok={}",
-        report.nodes_written, report.message_written, report.shelf_ok
+        "[dream] complete: {} nodes written, message={}, shelf_ok={}, note_delivered={}",
+        report.nodes_written, report.message_written, report.shelf_ok, report.note_delivered
     );
-
-    // 6. Output: notification + write to Notes.
-    if report.message_written {
-        let sermon_path = outbox.join(format!("{run_id}-sermon.json"));
-        if let Ok(content) = std::fs::read_to_string(&sermon_path)
-            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&content)
-        {
-            let body = json["body"].as_str().unwrap_or("(no body)");
-            let preview: String = body.chars().take(80).collect();
-            let _ = output::notify("Wunicorm", &preview, false);
-            let html = output::sermon_to_html(body);
-            let title = format!("Sermon — {}", Utc::now().format("%Y-%m-%d"));
-            let _ = output::ensure_notes_folder("Wunicorm", false);
-            let _ = output::write_note(&title, &html, "Wunicorm", false);
-            eprintln!("[dream] sermon written to Notes + notification sent");
-        }
+    for fault in &report.errors {
+        eprintln!("[dream] fault: {fault}");
+    }
+    if report.message_written && report.note_delivered {
+        eprintln!("[dream] sermon delivered to Notes and notification sent");
     }
 
-    // 7. Update last_seen.
+    // 6. Update last_seen.
     ingest::update_last_seen(&mut state.last_seen, &raw_notes);
     Ok(report.message_written)
 }

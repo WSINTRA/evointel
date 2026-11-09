@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Utc};
 use memory_proto::MemoryDb;
 use memory_proto::dreamer::{
-    DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, TimeWindows, run_dream,
+    DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery, TimeWindows, run_dream,
 };
 use memory_proto::edges::{Contains, HasProperty, LeadsTo, Similar};
 use memory_proto::message::{Message, MessageKind, shelf_check};
@@ -379,6 +379,7 @@ fn full_cycle_delivers_the_job_search_story() {
         &conn,
         &judge,
         &MechanicalSermon,
+        &NoDelivery,
         &spec("run-1", queue, &outbox, &log),
     );
 
@@ -483,6 +484,7 @@ fn the_dream_is_rebuildable() {
         &conn_a,
         &FixedJudge::new(judgments_a),
         &MechanicalSermon,
+        &NoDelivery,
         &spec(
             "run-a",
             queue_a,
@@ -494,6 +496,7 @@ fn the_dream_is_rebuildable() {
         &conn_b,
         &FixedJudge::new(judgments_b),
         &MechanicalSermon,
+        &NoDelivery,
         &spec(
             "run-b",
             queue_b,
@@ -536,6 +539,7 @@ fn nightmare_is_detected_then_healed_by_rerun() {
         &conn,
         &FixedJudge::new(judgments),
         &MechanicalSermon,
+        &NoDelivery,
         &spec("run-1", queue, &outbox, &log),
     );
 
@@ -559,6 +563,7 @@ fn nightmare_is_detected_then_healed_by_rerun() {
         &conn,
         &FixedJudge::new(judgments2),
         &MechanicalSermon,
+        &NoDelivery,
         &spec("run-2", queue2, &outbox, &log),
     );
 
@@ -819,6 +824,7 @@ fn the_story_grows_a_self_and_it_rebuilds() {
         &conn,
         &FixedJudge::new(nov_judgments),
         &MechanicalSermon,
+        &NoDelivery,
         &nov_spec,
     );
     assert!(nov_report.errors.is_empty(), "{:?}", nov_report.errors);
@@ -832,6 +838,7 @@ fn the_story_grows_a_self_and_it_rebuilds() {
         &conn,
         &FixedJudge::new(feb_judgments),
         &MechanicalSermon,
+        &NoDelivery,
         &feb_spec,
     );
     assert!(feb_report.errors.is_empty(), "{:?}", feb_report.errors);
@@ -899,12 +906,14 @@ fn the_story_grows_a_self_and_it_rebuilds() {
         &conn_b,
         &FixedJudge::new(nov_j2),
         &MechanicalSermon,
+        &NoDelivery,
         &spec_b_nov,
     );
     run_dream(
         &conn_b,
         &FixedJudge::new(feb_j2),
         &MechanicalSermon,
+        &NoDelivery,
         &spec_b_feb,
     );
 

@@ -19,6 +19,10 @@ pub struct Config {
     pub state_path: String,
     /// Mac Notes folders to skip when pulling notes.
     pub excluded_folders: Vec<String>,
+    /// The Mac Notes account that receives the sermons. `None` resolves
+    /// at runtime to the first account that holds folders.
+    #[serde(default)]
+    pub notes_account: Option<String>,
     /// LLM configuration. All fields are optional; env vars override.
     #[serde(default)]
     pub llm: LlmSection,
@@ -40,6 +44,7 @@ impl Default for Config {
             db_path: Self::default_db_path().to_string_lossy().to_string(),
             state_path: Self::default_state_path().to_string_lossy().to_string(),
             excluded_folders: vec!["Wunicorm".to_string(), "Recently Deleted".to_string()],
+            notes_account: None,
             llm: LlmSection::default(),
         }
     }
@@ -222,6 +227,7 @@ excluded_folders = ["Wunicorm"]
         assert_eq!(c.dream_time, "03:00");
         assert_eq!(c.db_path, "/tmp/test.db");
         assert_eq!(c.excluded_folders, vec!["Wunicorm"]);
+        assert_eq!(c.notes_account, None);
     }
 
     #[test]

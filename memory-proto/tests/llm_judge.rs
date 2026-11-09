@@ -8,7 +8,7 @@
 
 use chrono::{TimeZone, Utc};
 use memory_proto::db::MemoryDb;
-use memory_proto::dreamer::{DreamSpec, Judge, MechanicalSermon, run_dream};
+use memory_proto::dreamer::{DreamSpec, Judge, MechanicalSermon, NoDelivery, run_dream};
 use memory_proto::llm::{LlmError, LlmJudge, RecordedClient};
 use memory_proto::mutations::insert_entity;
 use memory_proto::nodes::{Entity, Note};
@@ -424,7 +424,7 @@ fn run_dream_with_llm_judge_names_phantoms_and_lands_the_rest() {
         outbox: outbox.clone(),
         dream_log: log.clone(),
     };
-    let report = run_dream(&conn, &judge, &MechanicalSermon, &spec);
+    let report = run_dream(&conn, &judge, &MechanicalSermon, &NoDelivery, &spec);
 
     // The hallucination is named; the good content lands anyway.
     assert_eq!(report.errors.len(), 1, "errors: {:?}", report.errors);

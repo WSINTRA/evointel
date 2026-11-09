@@ -5,10 +5,14 @@
 
 use chrono::{TimeZone, Utc};
 use memory_proto::db::MemoryDb;
-use memory_proto::dreamer::{DreamSpec, MechanicalSermon, SermonWriter, run_dream};
+use memory_proto::dreamer::{
+    run_dream, DeliveryOutcome, DreamSpec, MechanicalSermon, MessageDelivery, NoDelivery,
+    SermonWriter,
+};
 use memory_proto::llm::{LlmJudge, LlmSermonWriter, RecordedClient};
-use memory_proto::message::{Citation, Insight};
+use memory_proto::message::{Citation, Insight, Message};
 use memory_proto::nodes::Note;
+use memory_proto::observability::{is_nightmare, DreamReport};
 use memory_proto::schema::{self, EMBEDDING_DIM};
 use memory_proto::{extensions, vector};
 
@@ -81,11 +85,9 @@ fn llm_writer_carries_the_material_and_returns_prose() {
     assert_eq!(calls.len(), 1);
     assert!(calls[0].0[0].content.contains("living portrait"));
     assert!(calls[0].0[1].content.contains("job search"));
-    assert!(
-        calls[0].0[1]
-            .content
-            .contains("anxious about my job search")
-    );
+    assert!(calls[0].0[1]
+        .content
+        .contains("anxious about my job search"));
     assert!(calls[0].1.is_none(), "prose is unconstrained");
 }
 
@@ -160,7 +162,13 @@ fn run_dream_blends_llm_prose_with_mechanical_citations() {
     let log = dir.path().join("dream-log.jsonl");
     let minds = dream_minds(CANNED, Ok(PROSE.to_string()));
 
-    let report = run_dream(&conn, &minds.judge, &minds.writer, &spec((&outbox, &log)));
+    let report = run_dream(
+        &conn,
+        &minds.judge,
+        &minds.writer,
+        &NoDelivery,
+        &spec((&outbox, &log)),
+    );
 
     assert!(report.errors.is_empty(), "errors: {:?}", report.errors);
     assert!(report.message_written);
@@ -202,7 +210,13 @@ fn sermon_failure_falls_back_to_the_floor() {
         )),
     );
 
-    let report = run_dream(&conn, &minds.judge, &minds.writer, &spec((&outbox, &log)));
+    let report = run_dream(
+        &conn,
+        &minds.judge,
+        &minds.writer,
+        &NoDelivery,
+        &spec((&outbox, &log)),
+    );
 
     // The failure is recorded, the sermon still ships, still grounded.
     assert!(
@@ -300,4 +314,59 @@ fn the_floor_speaks_the_self_when_the_voice_fails() {
         .compose("job search", &sample_insights(), &sample_citations(), None)
         .unwrap();
     assert!(!bare.contains("the self:"), "{bare}");
+}
+
+/// A delivery seam whose Notes write fails — the exact shape of the
+/// first live night's silent failure, now made loud.
+struct DownDelivery;
+
+impl MessageDelivery for DownDelivery {
+    fn deliver(&self, _msg: &Message) -> DeliveryOutcome {
+        DeliveryOutcome {
+            note_delivered: false,
+            notification_sent: false,
+            errors: vec![
+                "delivery: notes write: osascript failed: Can't get folder \"Wunicorm\". (-1728)"
+                    .to_string(),
+            ],
+        }
+    }
+}
+
+#[test]
+fn delivery_failure_lands_in_the_ledger_as_a_fault() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open_test_db(&dir.path().join("t.db"));
+    let conn = db.connect().unwrap();
+    let outbox = dir.path().join("outbox");
+    let log = dir.path().join("dream-log.jsonl");
+    let minds = dream_minds(CANNED, Ok(PROSE.to_string()));
+
+    let report = run_dream(
+        &conn,
+        &minds.judge,
+        &minds.writer,
+        &DownDelivery,
+        &spec((&outbox, &log)),
+    );
+
+    // The artifact itself is green — delivery is a separate truth.
+    assert!(report.message_written);
+    assert!(report.shelf_ok);
+    assert!(!report.note_delivered);
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| e.contains("delivery: notes write")),
+        "errors: {:?}",
+        report.errors
+    );
+
+    // A failed delivery is a nightmare: the ledger carries the fault.
+    assert!(is_nightmare(&report, 0.5));
+    let line = std::fs::read_to_string(&log).unwrap();
+    let written: DreamReport = serde_json::from_str(line.trim()).unwrap();
+    assert!(!written.note_delivered);
+    assert!(written.errors.iter().any(|e| e.contains("delivery")));
 }
