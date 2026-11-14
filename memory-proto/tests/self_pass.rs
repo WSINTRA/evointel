@@ -8,12 +8,14 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use lbug::Value;
-use memory_proto::MemoryDb;
-use memory_proto::dreamer::{DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery, run_dream};
+use memory_proto::dreamer::{
+    run_dream, DreamJudgment, DreamSpec, FixedJudge, MechanicalSermon, NoDelivery,
+};
 use memory_proto::edges::Contains;
-use memory_proto::mutations::{NodeRef, seed_function_anchors};
+use memory_proto::mutations::{seed_function_anchors, NodeRef};
 use memory_proto::nodes::{Entity, FunctionAnchor, Memory, Note};
 use memory_proto::schema::EMBEDDING_DIM;
+use memory_proto::MemoryDb;
 
 fn ts(y: i32, m: u32, d: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(y, m, d, 9, 0, 0).single().unwrap()
@@ -356,6 +358,82 @@ fn the_second_dream_wires_the_trajectory_and_reads_drift() {
             "MATCH (s:SelfState {subject: 'user'}) RETURN count(s);"
         ),
         2
+    );
+}
+
+#[test]
+fn daily_runs_leave_daily_self_states_even_in_one_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open_test_db(&dir.path().join("dream.db"));
+    let conn = db.connect().unwrap();
+    seed_axes(&conn);
+    let outbox = dir.path().join("outbox");
+    let log = dir.path().join("logs").join("dreams.jsonl");
+
+    // Both runs share the same month window — the daemon's daily
+    // cadence. Each run must still be a point on the trajectory.
+    let day1 = vec![note_at("n1", "anxious monday", one_hot(1), 3)];
+    let day2 = vec![note_at("n3", "anxious tuesday", one_hot(1), 4)];
+    let judge1 = FixedJudge::new(vec![judgment_for(
+        "n1",
+        vec![tagged_memory("m1", "feeling")],
+    )]);
+    let judge2 = FixedJudge::new(vec![judgment_for(
+        "n3",
+        vec![tagged_memory("m3", "feeling")],
+    )]);
+
+    run_dream(
+        &conn,
+        &judge1,
+        &MechanicalSermon,
+        &NoDelivery,
+        &spec_with_windows(
+            "dream-day-1",
+            day1,
+            &outbox,
+            &log,
+            nov_window(),
+            nov_window(),
+        ),
+    );
+    let report = run_dream(
+        &conn,
+        &judge2,
+        &MechanicalSermon,
+        &NoDelivery,
+        &spec_with_windows(
+            "dream-day-2",
+            day2,
+            &outbox,
+            &log,
+            nov_window(),
+            nov_window(),
+        ),
+    );
+
+    assert!(report.errors.is_empty(), "errors: {:?}", report.errors);
+    let self_pass = report.self_pass.expect("the self was worked");
+    assert!(
+        self_pass.drift.is_some(),
+        "two daily runs — drift is readable, not overwritten"
+    );
+
+    assert_eq!(
+        count(
+            &conn,
+            "MATCH (s:SelfState {subject: 'user'}) RETURN count(s);"
+        ),
+        2,
+        "one user state per daily run"
+    );
+    assert_eq!(
+        count(
+            &conn,
+            "MATCH (:SelfState {subject: 'user'})-[r:SELF_TRAJECTORY]->(:SelfState {subject: 'user'}) RETURN count(r);"
+        ),
+        1,
+        "the two daily states are wired"
     );
 }
 

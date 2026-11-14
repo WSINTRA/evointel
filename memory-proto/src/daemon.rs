@@ -203,9 +203,18 @@ fn dream_cycle(
         ingest::pull_notes(&config.excluded_folders).map_err(|e| format!("pull notes: {e}"))?;
     eprintln!("[dream] pulled {} notes from Mac Notes", raw_notes.len());
 
-    // 2. Detect changes.
+    // 2. Detect changes, and tombstone notes that vanished from the
+    // source. Retirement is independent of tonight's queue: a deleted
+    // note must stop being cited even on a quiet night.
     let queue = ingest::detect_changes(&raw_notes, &state.last_seen);
     eprintln!("[dream] {} new/changed notes", queue.len());
+    let vanished = ingest::vanished_notes(&state.last_seen, &raw_notes);
+    if !vanished.is_empty() {
+        match crate::mutations::retire_notes(conn, &vanished, Utc::now()) {
+            Ok(()) => eprintln!("[dream] retired {} vanished notes", vanished.len()),
+            Err(e) => eprintln!("[dream] retire vanished notes error: {e}"),
+        }
+    }
 
     if queue.is_empty() {
         eprintln!("[dream] no changes — quiet night");
@@ -213,17 +222,16 @@ fn dream_cycle(
         return Ok(false);
     }
 
-    // 3. Embed the queue contents.
+    // 3. Embed the queue contents. The run's own center is the anchor
+    // fallback — never a fixed word like "general", which made every
+    // night pick the same concept.
     let llm_config = build_llm_config(config);
     let client = UreqClient::new(llm_config.clone());
     let contents: Vec<&str> = queue.iter().map(|n| n.content.as_str()).collect();
     let embeddings = client
         .embed(&contents)
         .map_err(|e| format!("embed notes: {e}"))?;
-    let anchor = client
-        .embed(&["general"])
-        .map_err(|e| format!("embed anchor: {e}"))?
-        .remove(0);
+    let anchor = centroid_embedding(&embeddings);
 
     let mut queue = queue;
     for (n, emb) in queue.iter_mut().zip(embeddings) {
@@ -284,6 +292,29 @@ fn build_llm_config(config: &Config) -> LlmConfig {
         llm.embed_model.clone_from(model);
     }
     llm
+}
+
+/// The run's semantic center: the element-wise mean of its note
+/// embeddings. Used only as the reflection's fallback query; the
+/// primary anchor is chosen from the entities this run's notes touch.
+fn centroid_embedding(embeddings: &[Vec<f32>]) -> Vec<f32> {
+    let Some(first) = embeddings.first() else {
+        return vec![];
+    };
+    let mut acc = vec![0f32; first.len()];
+    for emb in embeddings {
+        for (i, x) in emb.iter().enumerate() {
+            if let Some(slot) = acc.get_mut(i) {
+                *slot += x;
+            }
+        }
+    }
+    #[allow(clippy::cast_precision_loss)] // queue sizes stay tiny
+    let n = embeddings.len() as f32;
+    for x in &mut acc {
+        *x /= n;
+    }
+    acc
 }
 
 /// Build drift windows: current month vs previous month.

@@ -1,3 +1,4 @@
+mod anchor;
 mod drift;
 mod fetch;
 mod psyche;
@@ -5,6 +6,7 @@ mod snapshot;
 mod temporal;
 mod traversal;
 
+pub use anchor::{AnchorChoice, choose_anchor, recent_anchor_ids};
 pub use drift::{Activity, Drift, concept_activity, concept_drift};
 pub use fetch::{get_entity, get_event, get_fact, get_memory, get_note};
 pub use psyche::{

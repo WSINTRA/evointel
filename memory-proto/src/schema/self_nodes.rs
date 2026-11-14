@@ -90,6 +90,12 @@ pub const NOTE_ADD_PERCEPTION: &str = "ALTER TABLE Note ADD IF NOT EXISTS percep
 pub const MEMORY_ADD_FUNCTION: &str = "ALTER TABLE Memory ADD IF NOT EXISTS function_tag STRING;";
 pub const MEMORY_ADD_RUN: &str = "ALTER TABLE Memory ADD IF NOT EXISTS run_id STRING;";
 
+/// v4's additions to existing tables — the note tombstone (retirement
+/// keeps history; it never deletes) and the dream run's anchor choice
+/// (the novelty/recency memory that stops the sermon repeating).
+pub const NOTE_ADD_RETIRED: &str = "ALTER TABLE Note ADD IF NOT EXISTS retired_at TIMESTAMP;";
+pub const DREAM_RUN_ADD_ANCHOR: &str = "ALTER TABLE DreamRun ADD IF NOT EXISTS anchor_id STRING;";
+
 /// The full v2 batch: the three new tables plus the column additions.
 pub fn self_batch() -> Vec<String> {
     [
@@ -100,6 +106,16 @@ pub fn self_batch() -> Vec<String> {
         NOTE_ADD_PERCEPTION.to_string(),
         MEMORY_ADD_FUNCTION.to_string(),
         MEMORY_ADD_RUN.to_string(),
+    ]
+    .into_iter()
+    .collect()
+}
+
+/// The full v4 batch: note retirement and the run's anchor memory.
+pub fn history_batch() -> Vec<String> {
+    [
+        NOTE_ADD_RETIRED.to_string(),
+        DREAM_RUN_ADD_ANCHOR.to_string(),
     ]
     .into_iter()
     .collect()

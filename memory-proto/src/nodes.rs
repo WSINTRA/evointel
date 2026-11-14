@@ -204,6 +204,9 @@ pub struct DreamRun {
     pub kept_s: i64,
     pub kept_n: i64,
     pub dropped_total: i64,
+    /// The concept this run's sermon anchored on. The next run reads
+    /// recent anchors to rank novelty over repetition.
+    pub anchor_id: Option<String>,
     pub started_at: DateTime<Utc>,
     pub finished_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,

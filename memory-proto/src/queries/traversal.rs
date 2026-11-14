@@ -183,8 +183,10 @@ pub fn connected_notes(conn: &Connection, entity_id: &str) -> DbResult<Vec<Note>
     let mut notes = Vec::new();
     let mut seen: Vec<String> = vec![];
 
-    // Entity is the target: Note → edge → Entity
-    let q1 = "MATCH (n:Note)-[]->(e)-[]->(ent:Entity {id: $id}) RETURN n;";
+    // Entity is the target: Note → edge → Entity. Retired notes stay
+    // in the graph as history but are never cited as current grounding.
+    let q1 = "MATCH (n:Note)-[]->(e)-[]->(ent:Entity {id: $id}) \
+              WHERE n.retired_at IS NULL RETURN n;";
     let mut stmt = conn.prepare(q1)?;
     let result = conn.execute(
         &mut stmt,
@@ -203,7 +205,8 @@ pub fn connected_notes(conn: &Connection, entity_id: &str) -> DbResult<Vec<Note>
     }
 
     // Entity is the source: Entity → edge → Note
-    let q2 = "MATCH (ent:Entity {id: $id})-[]->(e)-[]->(n:Note) RETURN n;";
+    let q2 = "MATCH (ent:Entity {id: $id})-[]->(e)-[]->(n:Note) \
+              WHERE n.retired_at IS NULL RETURN n;";
     let mut stmt = conn.prepare(q2)?;
     let result = conn.execute(
         &mut stmt,

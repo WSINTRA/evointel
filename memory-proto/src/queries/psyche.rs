@@ -78,7 +78,7 @@ pub fn user_position(
     window: (DateTime<Utc>, DateTime<Utc>),
 ) -> DbResult<Option<Position>> {
     let result =
-        conn.query("MATCH (n:Note) WHERE n.judgment_coord IS NOT NULL AND n.perception_coord IS NOT NULL RETURN n.created_at, n.judgment_coord, n.perception_coord;")?;
+        conn.query("MATCH (n:Note) WHERE n.retired_at IS NULL AND n.judgment_coord IS NOT NULL AND n.perception_coord IS NOT NULL RETURN n.created_at, n.judgment_coord, n.perception_coord;")?;
     let mut sum = (0f64, 0f64);
     let mut n = 0u64;
     for row in result {
@@ -146,16 +146,18 @@ pub fn wunicorm_observed(conn: &Connection, run_id: &str) -> DbResult<Option<Pos
 
 // ─── The trajectory ──────────────────────────────────────────────────
 
-/// One self state on the trajectory: its window and position.
+/// One self state on the trajectory: when it was learned and where it
+/// stands. Ordered by `learned_at`, not `window_start`, because daily
+/// runs share a window and still each contribute a point.
 struct TrajectoryPoint {
-    window_start: DateTime<Utc>,
+    learned_at: DateTime<Utc>,
     position: Position,
 }
 
 /// The subject's recent trajectory, chronological, at most `span` long.
 fn trajectory(conn: &Connection, subject: &str, span: usize) -> DbResult<Vec<TrajectoryPoint>> {
     let mut stmt = conn.prepare(
-        "MATCH (s:SelfState {subject: $subject}) RETURN s.window_start, s.judgment_coord, s.perception_coord;",
+        "MATCH (s:SelfState {subject: $subject}) RETURN s.learned_at, s.judgment_coord, s.perception_coord;",
     )?;
     let result = conn.execute(
         &mut stmt,
@@ -171,12 +173,12 @@ fn trajectory(conn: &Connection, subject: &str, span: usize) -> DbResult<Vec<Tra
             };
             #[allow(clippy::cast_possible_truncation)] // f64 coords came from f32
             Some(TrajectoryPoint {
-                window_start: time_to_chrono(at),
+                learned_at: time_to_chrono(at),
                 position: (*j as f32, *p as f32),
             })
         })
         .collect();
-    points.sort_by_key(|p| p.window_start);
+    points.sort_by_key(|p| p.learned_at);
     if points.len() > span {
         points.drain(..points.len() - span);
     }

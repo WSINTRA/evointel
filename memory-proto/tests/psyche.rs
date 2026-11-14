@@ -99,6 +99,7 @@ fn run_with(conn: &lbug::Connection, id: &str, counts: (i64, i64, i64, i64, i64)
             kept_s: counts.2,
             kept_n: counts.3,
             dropped_total: counts.4,
+            anchor_id: None,
             started_at: ts(2026, 11, 30),
             finished_at: ts(2026, 11, 30),
             created_at: ts(2026, 11, 30),

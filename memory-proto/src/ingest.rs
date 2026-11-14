@@ -22,6 +22,8 @@ pub struct RawNote {
     pub id: String,
     /// The note's display title.
     pub name: String,
+    /// When the note was created (the real bucket for drift/recency).
+    pub created: DateTime<Utc>,
     /// When the note was last modified.
     pub modified: DateTime<Utc>,
     /// Raw HTML body from the Notes app.
@@ -75,10 +77,12 @@ fn build_pull_script(excluded: &[String]) -> String {
         set theNotes to notes of f
         repeat with i from 1 to (count of theNotes)
             set n to item i of theNotes
+            set c to creation date of n
             set d to modification date of n
             set output to output & "{NOTE_START}" & linefeed
             set output to output & (id of n) & linefeed
             set output to output & (name of n) & linefeed
+            set output to output & (year of c) & " " & (month of c as integer) & " " & (day of c) & " " & (hours of c) & " " & (minutes of c) & " " & (seconds of c) & linefeed
             set output to output & (year of d) & " " & (month of d as integer) & " " & (day of d) & " " & (hours of d) & " " & (minutes of d) & " " & (seconds of d) & linefeed
             set output to output & (body of n) & linefeed
             set output to output & "{NOTE_END}" & linefeed
@@ -112,7 +116,8 @@ fn parse_notes(input: &str) -> Result<Vec<RawNote>, IngestError> {
 /// ```text
 /// <id>
 /// <name>
-/// <year> <month> <day> <hour> <min> <sec>
+/// <created: year> <month> <day> <hour> <min> <sec>
+/// <modified: year> <month> <day> <hour> <min> <sec>
 /// <body_html>
 /// ```
 fn parse_record(record: &str) -> Result<RawNote, IngestError> {
@@ -129,17 +134,24 @@ fn parse_record(record: &str) -> Result<RawNote, IngestError> {
         .ok_or_else(|| IngestError::Parse("missing name".to_string()))?
         .trim()
         .to_string();
-    let date_line = lines
+    let created_line = lines
         .next()
-        .ok_or_else(|| IngestError::Parse("missing date".to_string()))?
+        .ok_or_else(|| IngestError::Parse("missing creation date".to_string()))?
+        .trim()
+        .to_string();
+    let modified_line = lines
+        .next()
+        .ok_or_else(|| IngestError::Parse("missing modification date".to_string()))?
         .trim()
         .to_string();
     // Body is everything remaining (may contain newlines).
     let body_html = lines.collect::<Vec<_>>().join("\n").trim().to_string();
-    let modified = parse_applescript_date(&date_line)?;
+    let created = parse_applescript_date(&created_line)?;
+    let modified = parse_applescript_date(&modified_line)?;
     Ok(RawNote {
         id,
         name,
+        created,
         modified,
         body_html,
     })
@@ -220,7 +232,10 @@ pub fn detect_changes(raw: &[RawNote], last_seen: &BTreeMap<String, DateTime<Utc
                 id: r.id.clone(),
                 content: html_to_text(&r.body_html),
                 content_embedding: None,
-                created_at: r.modified,
+                // The real creation date, not the modification time: an
+                // old note edited today must not look newly authored to
+                // drift or recency.
+                created_at: r.created,
                 updated_at: r.modified,
                 layer: 0,
                 context: "mac-notes".to_string(),
@@ -230,11 +245,27 @@ pub fn detect_changes(raw: &[RawNote], last_seen: &BTreeMap<String, DateTime<Utc
     queue
 }
 
-/// Update the `last_seen` map with the current modification dates.
+/// Replace `last_seen` with the current source snapshot.
+///
+/// A rebuild, not an insert-only merge: notes that vanished from Mac
+/// Notes leave the map, so the daemon can tombstone them once and never
+/// mistake the stale entry for a live note.
 pub fn update_last_seen(map: &mut BTreeMap<String, DateTime<Utc>>, raw: &[RawNote]) {
+    map.clear();
     for r in raw {
         map.insert(r.id.clone(), r.modified);
     }
+}
+
+/// The IDs that were in `last_seen` but are no longer in the source
+/// snapshot — notes deleted or moved out of the eligible folders.
+pub fn vanished_notes(last_seen: &BTreeMap<String, DateTime<Utc>>, raw: &[RawNote]) -> Vec<String> {
+    let live: std::collections::BTreeSet<&str> = raw.iter().map(|r| r.id.as_str()).collect();
+    last_seen
+        .keys()
+        .filter(|id| !live.contains(id.as_str()))
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
@@ -247,12 +278,14 @@ mod tests {
             "{NOTE_START}\n\
              x-coredata://ABC/ICNote/p1\n\
              My First Note\n\
+             2026 11 1 8 0 0\n\
              2026 11 4 13 25 49\n\
              <div>Hello world</div>\n\
              {NOTE_END}\n\
              {NOTE_START}\n\
              x-coredata://ABC/ICNote/p2\n\
              Second Note\n\
+             2026 11 5 9 0 0\n\
              2026 11 5 9 0 0\n\
              <div>Line 1</div>\n\
              <div>Line 2</div>\n\
@@ -280,6 +313,9 @@ mod tests {
         assert_eq!(notes[0].modified.hour(), 13);
         assert_eq!(notes[0].modified.minute(), 25);
         assert_eq!(notes[0].modified.second(), 49);
+        // Creation and modification are distinct facts.
+        assert_eq!(notes[0].created.day(), 1);
+        assert_eq!(notes[0].created.hour(), 8);
     }
 
     #[test]
@@ -337,10 +373,13 @@ mod tests {
 
     #[test]
     fn detect_changes_new_notes() {
+        let created = Utc.with_ymd_and_hms(2026, 10, 1, 8, 0, 0).unwrap();
+        let modified = Utc.with_ymd_and_hms(2026, 11, 4, 9, 0, 0).unwrap();
         let raw = vec![RawNote {
             id: "note-1".to_string(),
             name: "Test".to_string(),
-            modified: Utc::now(),
+            created,
+            modified,
             body_html: "<div>test</div>".to_string(),
         }];
         let last_seen = BTreeMap::new();
@@ -349,6 +388,11 @@ mod tests {
         assert_eq!(queue[0].id, "note-1");
         assert_eq!(queue[0].content, "test");
         assert_eq!(queue[0].context, "mac-notes");
+        assert_eq!(
+            queue[0].created_at, created,
+            "creation date is not the edit date"
+        );
+        assert_eq!(queue[0].updated_at, modified);
     }
 
     #[test]
@@ -357,6 +401,7 @@ mod tests {
         let raw = vec![RawNote {
             id: "note-1".to_string(),
             name: "Test".to_string(),
+            created: now,
             modified: now,
             body_html: "<div>test</div>".to_string(),
         }];
@@ -373,6 +418,7 @@ mod tests {
         let raw = vec![RawNote {
             id: "note-1".to_string(),
             name: "Test".to_string(),
+            created: old,
             modified: new,
             body_html: "<div>updated</div>".to_string(),
         }];
@@ -390,12 +436,14 @@ mod tests {
             RawNote {
                 id: "note-1".to_string(),
                 name: "A".to_string(),
+                created: now,
                 modified: now,
                 body_html: String::new(),
             },
             RawNote {
                 id: "note-2".to_string(),
                 name: "B".to_string(),
+                created: now,
                 modified: now,
                 body_html: String::new(),
             },
@@ -405,5 +453,44 @@ mod tests {
         assert_eq!(map.len(), 2);
         assert!(map.contains_key("note-1"));
         assert!(map.contains_key("note-2"));
+    }
+
+    #[test]
+    fn update_last_seen_prunes_vanished_notes() {
+        let now = Utc::now();
+        let mut map = BTreeMap::new();
+        map.insert("note-1".to_string(), now);
+        map.insert("note-deleted".to_string(), now);
+
+        let raw = vec![RawNote {
+            id: "note-1".to_string(),
+            name: "A".to_string(),
+            created: now,
+            modified: now,
+            body_html: String::new(),
+        }];
+        update_last_seen(&mut map, &raw);
+        assert_eq!(map.len(), 1);
+        assert!(!map.contains_key("note-deleted"));
+    }
+
+    #[test]
+    fn vanished_notes_are_the_ones_the_source_dropped() {
+        let now = Utc::now();
+        let mut last_seen = BTreeMap::new();
+        last_seen.insert("still-here".to_string(), now);
+        last_seen.insert("deleted".to_string(), now);
+
+        let raw = vec![RawNote {
+            id: "still-here".to_string(),
+            name: "A".to_string(),
+            created: now,
+            modified: now,
+            body_html: String::new(),
+        }];
+        assert_eq!(
+            vanished_notes(&last_seen, &raw),
+            vec!["deleted".to_string()]
+        );
     }
 }

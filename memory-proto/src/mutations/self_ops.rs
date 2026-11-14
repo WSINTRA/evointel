@@ -152,12 +152,34 @@ const INSERT_DREAM_RUN: &str = "MERGE (n:DreamRun {id: $id}) SET \
     n.kept_s = $kept_s, \
     n.kept_n = $kept_n, \
     n.dropped_total = $dropped_total, \
+    n.anchor_id = $anchor_id, \
     n.started_at = $started_at, \
     n.finished_at = $finished_at, \
     n.created_at = $created_at, \
     n.updated_at = $updated_at, \
     n.layer = $layer, \
     n.context = $context;";
+
+/// Records the concept this run anchored on, after the reflection
+/// chooses it. A missing row (every note failed judgment) is a no-op —
+/// the run simply leaves no anchor memory behind.
+pub fn set_dream_run_anchor(conn: &Connection, run_id: &str, anchor_id: &str) -> DbResult<()> {
+    let mut stmt = conn.prepare(
+        "MATCH (r:DreamRun {id: $id}) SET r.anchor_id = $anchor_id, r.updated_at = $updated_at;",
+    )?;
+    conn.execute(
+        &mut stmt,
+        vec![
+            ("id", Value::String(run_id.to_string())),
+            ("anchor_id", Value::String(anchor_id.to_string())),
+            (
+                "updated_at",
+                Value::Timestamp(chrono_to_time(&chrono::Utc::now())),
+            ),
+        ],
+    )?;
+    Ok(())
+}
 
 pub fn insert_dream_run(conn: &Connection, run: &DreamRun) -> DbResult<()> {
     let mut stmt = conn.prepare(INSERT_DREAM_RUN)?;
@@ -172,6 +194,10 @@ pub fn insert_dream_run(conn: &Connection, run: &DreamRun) -> DbResult<()> {
             ("kept_s", Value::Int64(run.kept_s)),
             ("kept_n", Value::Int64(run.kept_n)),
             ("dropped_total", Value::Int64(run.dropped_total)),
+            (
+                "anchor_id",
+                super::opt_string_to_value(run.anchor_id.as_deref()),
+            ),
             (
                 "started_at",
                 Value::Timestamp(chrono_to_time(&run.started_at)),

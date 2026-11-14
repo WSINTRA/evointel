@@ -7,8 +7,8 @@ use lbug::Value;
 use memory_proto::db::MemoryDb;
 use memory_proto::edges::Grounds;
 use memory_proto::mutations::{
-    NodeRef, insert_dream_run, insert_self_state, link_grounds, seed_function_anchors,
-    set_note_coordinates, wire_self_trajectory,
+    insert_dream_run, insert_self_state, link_grounds, seed_function_anchors, set_note_coordinates,
+    wire_self_trajectory, NodeRef,
 };
 use memory_proto::nodes::{DreamRun, FunctionAnchor, Note, SelfState};
 use memory_proto::queries::graph_snapshot;
@@ -78,6 +78,7 @@ fn dream_run(id: &str) -> DreamRun {
         kept_s: 0,
         kept_n: 3,
         dropped_total: 1,
+        anchor_id: None,
         started_at: ts(2026, 11, 30),
         finished_at: ts(2026, 11, 30),
         created_at: ts(2026, 11, 30),
@@ -419,10 +420,9 @@ fn grounds_edges_and_evidence_are_visible_to_the_snapshot() {
 
     let snap = graph_snapshot(&conn).unwrap();
     // The Grounds edge node is in the node inventory…
-    assert!(
-        snap.nodes
-            .contains(&("Grounds".to_string(), "grounds-g-1".to_string()))
-    );
+    assert!(snap
+        .nodes
+        .contains(&("Grounds".to_string(), "grounds-g-1".to_string())));
     // …and the triple traces the positional claim to its evidence. The
     // SelfState keys on its deterministic id — the semantic-key fallback.
     assert!(snap.edges.contains(&(

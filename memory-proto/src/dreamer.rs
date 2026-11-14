@@ -28,16 +28,16 @@ use crate::message::{Citation, Insight, Message, MessageKind, shelf_check, write
 use crate::mutations::{
     NodeRef, insert_dream_run, insert_entity, insert_event, insert_fact, insert_memory,
     insert_note, insert_self_state, insert_time, link_contains, link_grounds, link_has_property,
-    link_leads_to, link_similar, set_note_coordinates, wire_self_trajectory, wire_time_hierarchy,
+    link_leads_to, link_similar, set_dream_run_anchor, set_note_coordinates, wire_self_trajectory,
+    wire_time_hierarchy,
 };
 use crate::nodes::{DreamRun, Entity, Event, Fact, Memory, Note, SelfState, Time};
 use crate::observability::{DreamReport, SelfPassReport, append_dream_report};
 use crate::queries::{
-    active_axis_frame, concept_drift, connected_notes, events_in_range, evolve_wunicorm,
-    function_drift, get_entity, graph_snapshot, rigidity, structural_similarity, user_position,
-    wunicorm_observed,
+    active_axis_frame, choose_anchor, concept_drift, connected_notes, events_in_range,
+    evolve_wunicorm, function_drift, graph_snapshot, rigidity, structural_similarity,
+    user_position, wunicorm_observed,
 };
-use crate::vector::semantic_search;
 
 /// An edge the judgment asserts: endpoints plus the edge's own
 /// properties.
@@ -394,6 +394,7 @@ pub fn run_dream(
             // Per-run note counts stay far below 2^63.
             #[allow(clippy::cast_possible_wrap)]
             dropped_total: dropped.len() as i64,
+            anchor_id: None,
             started_at,
             finished_at: now,
             created_at: now,
@@ -548,7 +549,9 @@ fn work_the_self(
             None
         }
     };
-    let user_state_id = format!("self-user-{}", window.0.timestamp());
+    // One state per daily run, not per shared window: the trajectory is
+    // the days the self actually walked.
+    let user_state_id = format!("self-user-{}", spec.run_id);
     if let Some(position) = user {
         let state = SelfState {
             id: user_state_id.clone(),
@@ -576,14 +579,7 @@ fn work_the_self(
             Ok(()) => *nodes_written += 1,
             Err(e) => errors.push(format!("self pass: user state write failed: {e}")),
         }
-        wire_trajectory(
-            conn,
-            "user",
-            window.0,
-            &user_state_id,
-            nodes_written,
-            errors,
-        );
+        wire_trajectory(conn, "user", now, &user_state_id, nodes_written, errors);
         for note_id in &measured {
             ground_evidence(
                 conn,
@@ -636,7 +632,7 @@ fn work_the_self(
             (0, 0)
         }
     };
-    let w_state_id = format!("self-wunicorm-{}", window.0.timestamp());
+    let w_state_id = format!("self-wunicorm-{}", spec.run_id);
     let w_state = SelfState {
         id: w_state_id.clone(),
         subject: "wunicorm".to_string(),
@@ -662,14 +658,7 @@ fn work_the_self(
         Ok(()) => *nodes_written += 1,
         Err(e) => errors.push(format!("self pass: wunicorm state write failed: {e}")),
     }
-    wire_trajectory(
-        conn,
-        "wunicorm",
-        window.0,
-        &w_state_id,
-        nodes_written,
-        errors,
-    );
+    wire_trajectory(conn, "wunicorm", now, &w_state_id, nodes_written, errors);
     // Provenance: the memories this run chose to keep — W's evidence is
     // its choices.
     match kept_memory_ids(conn, &spec.run_id) {
@@ -722,14 +711,17 @@ fn chrono_timestamp(v: &Value) -> Option<DateTime<Utc>> {
     }
 }
 
-/// The most recent state of one subject from a strictly earlier window.
+/// The most recent state of one subject learned strictly before this
+/// run. Daily runs share a window, so `learned_at` — not `window_start`
+/// — is the trajectory's clock. The current state is excluded by id.
 fn latest_state_before(
     conn: &Connection,
     subject: &str,
-    window_start: DateTime<Utc>,
+    before: DateTime<Utc>,
+    exclude_id: &str,
 ) -> DbResult<Option<String>> {
     let mut stmt =
-        conn.prepare("MATCH (s:SelfState {subject: $subject}) RETURN s.id, s.window_start;")?;
+        conn.prepare("MATCH (s:SelfState {subject: $subject}) RETURN s.id, s.learned_at;")?;
     let result = conn.execute(
         &mut stmt,
         vec![("subject", Value::String(subject.to_string()))],
@@ -739,10 +731,13 @@ fn latest_state_before(
         let [Value::String(id), ts] = row.as_slice() else {
             continue;
         };
+        if id == exclude_id {
+            continue;
+        }
         let Some(at) = chrono_timestamp(ts) else {
             continue;
         };
-        if at < window_start && best.as_ref().is_none_or(|(t, _)| at > *t) {
+        if at < before && best.as_ref().is_none_or(|(t, _)| at > *t) {
             best = Some((at, id.clone()));
         }
     }
@@ -750,10 +745,11 @@ fn latest_state_before(
 }
 
 /// W's previous core — the damped position this run evolves from.
-/// `(0.0, 0.0)` when W has never stood before.
+/// `(0.0, 0.0)` when W has never stood before. The latest `learned_at`
+/// wins: within one monthly window, each day is still a step.
 fn wunicorm_prev_core(conn: &Connection) -> DbResult<(f32, f32)> {
     let mut stmt = conn.prepare(
-        "MATCH (s:SelfState {subject: 'wunicorm'}) RETURN s.window_start, s.judgment_core, s.perception_core;",
+        "MATCH (s:SelfState {subject: 'wunicorm'}) RETURN s.learned_at, s.judgment_core, s.perception_core;",
     )?;
     let result = conn.execute(&mut stmt, vec![])?;
     let mut best: Option<(DateTime<Utc>, f32, f32)> = None;
@@ -806,12 +802,12 @@ fn kept_memory_ids(conn: &Connection, run_id: &str) -> DbResult<Vec<String>> {
 fn wire_trajectory(
     conn: &Connection,
     subject: &str,
-    window_start: DateTime<Utc>,
+    learned_at: DateTime<Utc>,
     next_id: &str,
     nodes_written: &mut usize,
     errors: &mut Vec<String>,
 ) {
-    let prev = match latest_state_before(conn, subject, window_start) {
+    let prev = match latest_state_before(conn, subject, learned_at, next_id) {
         Ok(Some(p)) => p,
         Ok(None) => return, // first state — the trajectory starts here
         Err(e) => {
@@ -1049,38 +1045,57 @@ fn reflect_and_speak(
     self_pass: Option<SelfPassReport>,
     errors: &mut Vec<String>,
 ) -> (bool, bool, bool) {
-    // Find the anchor concept by meaning.
-    let anchor = match semantic_search(conn, &spec.anchor_embedding, 1, "Entity") {
-        Ok(hits) => hits.into_iter().next(),
+    // Choose what tonight is about from the material this run just
+    // wrote — ranked by meaning, support, recency, and novelty. A fixed
+    // query word or a nearest-ever lookup is how a sermon starts
+    // repeating itself.
+    let anchor = match choose_anchor(conn, &spec.queue, &spec.anchor_embedding, now) {
+        Ok(Some(choice)) => choice,
+        Ok(None) => {
+            // Nothing this run touches is a defensible anchor. Silence is
+            // correct here; it is not a fault.
+            return (false, true, false);
+        }
         Err(e) => {
-            errors.push(format!("reflection: anchor search failed: {e}"));
-            None
+            errors.push(format!("reflection: anchor choice failed: {e}"));
+            return (false, true, false);
         }
     };
-    let Some(anchor) = anchor else {
-        errors.push("reflection: no anchor concept found for the sermon".to_string());
-        return (false, false, false);
-    };
-    let anchor_ref = NodeRef::new(anchor.id.clone(), "Entity");
-    let anchor_name = get_entity(conn, &anchor.id)
-        .ok()
-        .flatten()
-        .map_or_else(|| anchor.id.clone(), |e| e.label_resolved);
+    let anchor_ref = NodeRef::new(anchor.entity.id.clone(), "Entity");
+    let anchor_name = anchor.entity.label_resolved.clone();
+    if let Err(e) = set_dream_run_anchor(conn, &spec.run_id, &anchor.entity.id) {
+        errors.push(format!("reflection: anchor record failed: {e}"));
+    }
 
-    // Citations: the user's actual notes the anchor connects to.
-    let citations: Vec<Citation> = match connected_notes(conn, &anchor.id) {
-        Ok(notes) => notes
-            .iter()
-            .map(|n| Citation {
-                note_id: n.id.clone(),
-                content: n.content.clone(),
-            })
-            .collect(),
+    // Citations: the user's actual live notes the anchor connects to,
+    // newest first. Retired notes are history, never current evidence.
+    let citations: Vec<Citation> = match connected_notes(conn, &anchor.entity.id) {
+        Ok(mut notes) => {
+            notes.sort_by(|a, b| {
+                b.updated_at
+                    .cmp(&a.updated_at)
+                    .then_with(|| a.id.cmp(&b.id))
+            });
+            notes
+                .iter()
+                .map(|n| Citation {
+                    note_id: n.id.clone(),
+                    content: n.content.clone(),
+                })
+                .collect()
+        }
         Err(e) => {
             errors.push(format!("reflection: citation read failed: {e}"));
             vec![]
         }
     };
+
+    // No live evidence, no sermon: the shelf check would reject an
+    // uncited artifact anyway, and writing one only manufactures a
+    // nightmare out of an honest quiet.
+    if citations.is_empty() {
+        return (false, true, false);
+    }
 
     // Insights: what the anchor is connected to, drift across the
     // windows, and the events of the period.

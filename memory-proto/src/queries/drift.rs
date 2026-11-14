@@ -52,6 +52,9 @@ struct Neighbor {
     embedding: Option<Vec<f32>>,
     /// `learned_at`, or `created_at` for notes; `None` if neither.
     at: Option<DateTime<Utc>>,
+    /// Notes that vanished from the source keep their history in the
+    /// graph but are no longer current activity.
+    retired: bool,
 }
 
 /// Like `get_prop`, but treats `Value::Null` as absent.
@@ -81,12 +84,15 @@ fn to_neighbor(node: &NodeVal, edge_label: &str) -> Option<Neighbor> {
         Some(Value::Timestamp(t)) => Some(time_to_chrono(t)),
         _ => None,
     };
+    let retired = node.get_label_name().as_str() == "Note"
+        && matches!(prop_value(props, "retired_at"), Some(Value::Timestamp(_)));
     Some(Neighbor {
         id,
         label: node.get_label_name().clone(),
         edge_label: edge_label.to_string(),
         embedding,
         at,
+        retired,
     })
 }
 
@@ -148,6 +154,9 @@ fn window_neighbors<'a>(
     let mut seen = BTreeSet::new();
     let mut out = vec![];
     for n in nbs {
+        if n.retired {
+            continue;
+        }
         let Some(at) = n.at else { continue };
         if at >= window.0 && at <= window.1 && seen.insert(n.id.as_str()) {
             out.push(n);
@@ -198,6 +207,9 @@ pub fn concept_activity(
     let mut activities: Vec<Activity> = nbs
         .into_iter()
         .filter_map(|n| {
+            if n.retired {
+                return None;
+            }
             let at = n.at?;
             (at >= start && at <= end).then(|| Activity {
                 node: NodeRef::new(n.id, n.label),

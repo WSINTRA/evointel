@@ -28,7 +28,8 @@ use super::meta;
 /// Every migration batch, in order: the version it produces and the
 /// statements that produce it. v1 is the prototype schema, whole. v2 is
 /// the self layer (function anchors, self states, dream runs, and the
-/// derived-coordinate columns).
+/// derived-coordinate columns). v3 wires the self's provenance edges.
+/// v4 adds the note tombstone and the dream run's anchor memory.
 pub fn batches() -> Vec<(i64, Vec<String>)> {
     let v1: Vec<String> = super::entity_nodes::entity_node_ddls()
         .into_iter()
@@ -57,6 +58,7 @@ pub fn batches() -> Vec<(i64, Vec<String>)> {
         (1, v1),
         (2, super::self_nodes::self_batch()),
         (3, super::self_edges::batch()),
+        (4, super::self_nodes::history_batch()),
     ]
 }
 
